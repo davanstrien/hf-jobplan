@@ -4,10 +4,10 @@ Experimental `hf` CLI extension. `hf jobplan <model>` prints a short prompt for 
 
 ```
 hf extensions install davanstrien/hf-jobplan
-hf jobplan answerdotai/ModernBERT-base            # an encoder: the default verb is train
-hf jobplan google/embeddinggemma-2                # an embedding model: the default verb is infer
-hf jobplan thinkingmachines/Inkling-2-Mini --task train
-hf jobplan thinkingmachines/Inkling-2-Mini --short   # the one-sentence prompt
+hf jobplan thinkingmachines/Inkling-2-Mini              # an LLM: bulk inference by default
+hf jobplan thinkingmachines/Inkling-2-Mini --task train # fine-tune it
+hf jobplan thinkingmachines/Inkling-2-Mini --short      # the one-sentence prompt
+hf jobplan answerdotai/ModernBERT-base                  # an encoder: fine-tuning by default
 hf jobplan --list
 ```
 
@@ -19,9 +19,9 @@ hf jobplan --list
 
 > Run thinkingmachines/Inkling-2-Mini over <dataset> on Hugging Face Jobs with the `hf` CLI: serve it with vLLM or SGLang inside the Job and send concurrent requests, write to the bucket mounted with `-v hf://buckets/<bucket>:/out` (a token only for gated or private repos), test a few rows first, and report the Job ids and cost per 1,000 items.
 
-`hf jobplan answerdotai/ModernBERT-base --short`:
+`hf jobplan thinkingmachines/Inkling-2-Mini --short --task train`:
 
-> Fine-tune answerdotai/ModernBERT-base on <dataset> on Hugging Face Jobs with the `hf` CLI: use the transformers Trainer, write to the bucket mounted with `-v hf://buckets/<bucket>:/out` (a token only for gated or private repos), test a few rows first, and report the Job ids, cost and eval result.
+> Fine-tune thinkingmachines/Inkling-2-Mini on <dataset> on Hugging Face Jobs with the `hf` CLI: use TRL, write to the bucket mounted with `-v hf://buckets/<bucket>:/out` (a token only for gated or private repos), test a few rows first, and report the Job ids, cost and eval result.
 
 For a gated model the token clause changes to "this model is gated: pass `--secrets HF_TOKEN`".
 
@@ -50,30 +50,30 @@ Every model gets a prompt. A kind without its own pointer uses the `other` point
 | `infer` | `diffusion` | the diffusers pipeline from the model card |
 | either | `other` | what the model card documents |
 
-## Example: an encoder
+## Example: an LLM
 
-`hf jobplan answerdotai/ModernBERT-base` prints:
+`hf jobplan thinkingmachines/Inkling-2-Mini` prints:
 
 ````
-# Fine-tune answerdotai/ModernBERT-base on Hugging Face Jobs
+# Run thinkingmachines/Inkling-2-Mini on Hugging Face Jobs: bulk generation, classification or extraction
 
 Everything below uses the `hf` CLI, which printed this. `hf --help` lists its commands, and every command takes `--help`.
 
-Task tag `fill-mask`, library `transformers` -> kind `encoder`. Verb: `train` (the default for this kind).
+Task tag `image-text-to-text`, library `transformers` -> kind `llm`. Verb: `infer` (the default for this kind).
 Docs as markdown: Jobs https://huggingface.co/docs/hub/jobs.md; `transformers` index https://huggingface.co/docs/transformers/llms.txt. Any Hugging Face docs page is markdown if you add `.md` to its URL.
-The other verb: `hf jobplan answerdotai/ModernBERT-base --task infer`. The whole mapping: `hf jobplan --list`.
+The other verb: `hf jobplan thinkingmachines/Inkling-2-Mini --task train`. The whole mapping: `hf jobplan --list`.
 
 ## For this kind of model
-Use the transformers `Trainer` (https://huggingface.co/docs/transformers/trainer.md, source https://github.com/huggingface/transformers) for a classifier, or Sentence Transformers (https://raw.githubusercontent.com/huggingface/sentence-transformers/main/docs/sentence_transformer/training_overview.md) for an embedding model. transformers has no training script to run by URL: write a uv script, or read `train-classifier.py` in the scripts folder above. The Job disk is deleted at the end: write checkpoints and the final model to the mounted bucket (step 4).
+Start the model's server (vLLM or SGLang, whichever the model card or the catalogue names) inside the Job and send many requests at once to localhost. A loop over `model.generate` is several times slower. `saturate` (https://github.com/davanstrien/saturate) is a client for this: dataset in, concurrent requests to the server, resumable parquet out.
 
 ## Find out first (each line is an existing command)
-    hf models card answerdotai/ModernBERT-base --text
+    hf models card thinkingmachines/Inkling-2-Mini --text
         how the authors run it: library or server, container image, flags
-    hf models info answerdotai/ModernBERT-base
+    hf models info thinkingmachines/Inkling-2-Mini
         task, library, gated or not, parameter count and dtype (the GPU memory you need), files
-    hf endpoints catalog ls --search ModernBERT-base
+    hf endpoints catalog ls --search Inkling-2-Mini
         servers tested for this model, if it is listed
-    hf datasets ls uv-scripts/classification
+    hf datasets ls uv-scripts/vllm
         ready uv scripts: read one before you write one
     hf jobs hardware
         flavors and prices
@@ -82,11 +82,21 @@ Use the transformers `Trainer` (https://huggingface.co/docs/transformers/trainer
 
 ## Then
 1. Use a ready script if one fits. If not, write one uv script with inline dependencies. Launch with `hf jobs uv run --detach --timeout <limit> --flavor <flavor> <script>`.
-2. Run a small test first (a few steps on a few rows). Read the result with `hf jobs logs <id>` and open the outputs: an exit code of 0 is not a check.
+2. Run a small test first (a few rows). Read the result with `hf jobs logs <id>` and open the outputs: an exit code of 0 is not a check.
 3. Say which flavor you picked and why. If `hf jobs inspect <id>` still shows SCHEDULING after 10 minutes, `hf jobs cancel <id>` and use another flavor.
 4. Run the full input. Write outputs and checkpoints to a bucket mounted into the Job: `-v hf://buckets/<namespace>/<bucket>:/out`, then write under `/out`. A bucket mount is read and write, so the Job needs no token to save its results. Create the bucket first with `hf buckets create <namespace>/<bucket>` if it does not exist. A dataset mounts the same way, read-only: `-v hf://datasets/<org>/<dataset>:/data`. Pass `--secrets HF_TOKEN` only when the Job must read a gated or private model or dataset, or when the user asked for a model or dataset repo as the result.
-5. Report from `hf jobs inspect <id>`: Job ids, flavor, billed time, cost, the evaluation result, and what you did not check.
+5. Report from `hf jobs inspect <id>`: Job ids, flavor, billed time, cost, cost per 1,000 items, and what you did not check.
 ````
+
+## Example: fine-tuning
+
+`hf jobplan thinkingmachines/Inkling-2-Mini --task train` changes the title, the pointer and the report. The pointer:
+
+````
+Use TRL (https://github.com/huggingface/trl). It has examples for some models: look in https://github.com/huggingface/trl/tree/main/examples for a folder that names this model or its family first. It also ships a general training script that runs on Jobs as it is: `hf jobs uv run --detach --timeout <limit> --flavor <flavor> -- https://raw.githubusercontent.com/huggingface/trl/refs/heads/main/trl/scripts/sft.py --model_name_or_path thinkingmachines/Inkling-2-Mini --dataset_name <dataset> --output_dir <dir>` (arguments: read the script; guide: https://huggingface.co/docs/trl/jobs_training.md; LoRA with PEFT: https://huggingface.co/docs/peft/quicktour.md). Write your own script with `SFTTrainer` only if the data needs code that the script does not have. The Job disk is deleted at the end: write checkpoints and the final model to the mounted bucket (step 4).
+````
+
+An encoder such as `answerdotai/ModernBERT-base` gets the fine-tuning prompt by default, with the transformers `Trainer` as the pointer.
 
 ## Example: the fallback
 
