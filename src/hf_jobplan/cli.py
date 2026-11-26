@@ -16,7 +16,7 @@ from pathlib import Path
 
 os.environ.setdefault("HF_HUB_DISABLE_EXPERIMENTAL_WARNING", "1")
 os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
-from huggingface_hub import HfApi, hf_hub_download, snapshot_download  # noqa: E402
+from huggingface_hub import HfApi, hf_hub_download, snapshot_download
 
 TASKS = {
     "generate": "Bulk generation, classification or extraction with an LLM or VLM: start the model's server (vLLM or SGLang, whichever the card or the catalogue names) inside the Job, wait for it to be ready, and send concurrent requests to localhost. A loop over `model.generate` is several times slower. `saturate` (https://pypi.org/project/saturate/) sends the requests and finds the concurrency for you.",
@@ -25,7 +25,7 @@ TASKS = {
     "train-llm": "Fine-tune an LLM: use TRL `SFTTrainer` (https://huggingface.co/docs/trl). Save checkpoints to a mounted bucket or push to a private repo, because the Job disk is deleted at the end.",
     "train-encoder": "Fine-tune an encoder: use the transformers `Trainer`, or Sentence Transformers for embedding models (https://sbert.net/docs/sentence_transformer/training_overview.html). Save the model before the Job ends.",
 }
-RUN_HINTS = re.compile(r"docker|vllm|sglang|llama[-_.]?cpp|text-embeddings-inference|\btei\b|pip install|uv pip|uv run|trust_remote_code|sentence_transformers|SentenceTransformer|flash[-_]attn|--image|:latest|ghcr\.io|serve ", re.I)
+RUN_HINTS = re.compile(r"docker|vllm|sglang|llama[-_.]?cpp|text-embeddings-inference|\btei\b|pip install|uv pip|uv run|trust_remote_code|sentence_transformers|SentenceTransformer|flash[-_]attn|--image|:latest|ghcr\.io|serve ", re.IGNORECASE)
 CACHE = Path.home() / ".cache" / "hf-jobplan"
 
 
@@ -73,7 +73,7 @@ def scripts_naming(model: str, api: HfApi) -> list[str]:
 
 
 def flavors() -> list[dict]:
-    out = subprocess.run(["hf", "jobs", "hardware", "--format", "json"], capture_output=True, text=True).stdout
+    out = subprocess.run(["hf", "jobs", "hardware", "--format", "json"], check=False, capture_output=True, text=True).stdout
     rows = []
     for row in json.loads(out or "[]"):
         match = re.match(r"(\d+)x .*\((\d+) GB\)", row["accelerator"])
