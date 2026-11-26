@@ -23,8 +23,8 @@ Every model gets a prompt. A kind without its own pointer uses the `other` point
 
 | Verb | Kind | Pointer |
 |---|---|---|
-| `train` | `llm` | [TRL](https://huggingface.co/docs/trl/sft_trainer) `SFTTrainer` |
-| `train` | `encoder`, `classifier` | [transformers](https://huggingface.co/docs/transformers/training) `Trainer` |
+| `train` | `llm` | [TRL](https://github.com/huggingface/trl): its ready [`sft.py`](https://github.com/huggingface/trl/blob/main/trl/scripts/sft.py) script runs on Jobs as it is ([guide](https://huggingface.co/docs/trl/jobs_training)) |
+| `train` | `encoder`, `classifier` | [transformers](https://github.com/huggingface/transformers) [`Trainer`](https://huggingface.co/docs/transformers/trainer) |
 | `train` | `embedding` | [Sentence Transformers](https://sbert.net/docs/sentence_transformer/training_overview.html), with an evaluator before and after |
 | `infer` | `llm`, `ocr` | the model's server (vLLM or SGLang) inside the Job, with concurrent requests |
 | `infer` | `embedding` | Sentence Transformers, or Text Embeddings Inference |
@@ -58,10 +58,10 @@ The other verb: `hf jobplan answerdotai/ModernBERT-base --task infer`. The whole
         how to launch; `hf jobs run --help` if the model needs its own image
 
 ## For this kind of model
-Use the transformers `Trainer` (https://huggingface.co/docs/transformers/training) for a classifier, or Sentence Transformers (https://sbert.net/docs/sentence_transformer/training_overview.html) for an embedding model. The Job disk is deleted at the end: save checkpoints and the final model to a mounted bucket or a private repo.
+Use the transformers `Trainer` (https://huggingface.co/docs/transformers/trainer, source https://github.com/huggingface/transformers) for a classifier, or Sentence Transformers (https://sbert.net/docs/sentence_transformer/training_overview.html) for an embedding model. transformers has no training script to run by URL: write a uv script, or read `train-classifier.py` in the scripts folder above. The Job disk is deleted at the end: save checkpoints and the final model to a mounted bucket or a private repo.
 
 ## Then
-1. Write one uv script with inline dependencies. Launch with `hf jobs uv run --detach --timeout <limit> --flavor <flavor> <script>`.
+1. Use a ready script if one fits. If not, write one uv script with inline dependencies. Launch with `hf jobs uv run --detach --timeout <limit> --flavor <flavor> <script>`.
 2. Run a small test first (a few steps on a few rows). Read the result with `hf jobs logs <id>` and open the outputs: an exit code of 0 is not a check.
 3. Say which flavor you picked and why. If `hf jobs inspect <id>` still shows SCHEDULING after 10 minutes, `hf jobs cancel <id>` and use another flavor.
 4. Run the full input. Write to the place the user named: mount a bucket with `-v` (see the help), or see `hf buckets --help`.
@@ -116,11 +116,11 @@ Default verb: train for encoder; infer for every other kind.
   infer  classifier  Use the transformers `pipeline` or the loading code from the model card, with batches on one small GPU.
   infer  speech      Use the library from the model card.
   infer  other       Use the library and the loading code from the model card.
-  train  llm         Use TRL `SFTTrainer` (https://huggingface.co/docs/trl/sft_trainer).
-  train  ocr         Use TRL `SFTTrainer` (https://huggingface.co/docs/trl/sft_trainer) or the fine-tuning code the model card links.
+  train  llm         Use TRL (https://github.com/huggingface/trl).
+  train  ocr         Use TRL (https://github.com/huggingface/trl).
   train  embedding   Use Sentence Transformers (https://sbert.net/docs/sentence_transformer/training_overview.html) and run an evaluator before and after.
-  train  encoder     Use the transformers `Trainer` (https://huggingface.co/docs/transformers/training) for a classifier, or Sentence Transformers (https://sbert.net/docs/sentence_transformer/training_overview.html) for an embedding model.
-  train  classifier  Use the transformers `Trainer` (https://huggingface.co/docs/transformers/training).
+  train  encoder     Use the transformers `Trainer` (https://huggingface.co/docs/transformers/trainer, source https://github.com/huggingface/transformers) for a classifier, or Sentence Transformers (https://sbert.net/docs/sentence_transformer/training_overview.html) for an embedding model.
+  train  classifier  Use the transformers `Trainer` (https://huggingface.co/docs/transformers/trainer, source https://github.com/huggingface/transformers).
   train  other       Use the training method that the model card or its library documents.
 ```
 

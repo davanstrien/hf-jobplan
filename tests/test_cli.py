@@ -47,7 +47,7 @@ def test_every_kind_and_verb_renders(kind, verb):
     tag = next((t for t, k in TASK_TAG_TO_KIND.items() if k == kind), "text-to-image")
     repo = "org/some-ocr" if kind == "ocr" else "org/model"
     prompt = render(repo, tag, "transformers", [], verb)
-    assert "hf jobs uv run --detach" in prompt and "{" not in prompt
+    assert "hf jobs uv run --detach" in prompt and "{" not in prompt and "}" not in prompt
 
 
 def test_default_verb_is_train_for_an_encoder_and_infer_for_the_rest():
@@ -56,7 +56,8 @@ def test_default_verb_is_train_for_an_encoder_and_infer_for_the_rest():
 
 
 def test_training_names_the_library():
-    assert "TRL `SFTTrainer`" in render("org/model", "text-generation", "transformers", [], "train")
+    llm = render("org/model", "text-generation", "transformers", [], "train")
+    assert "trl/scripts/sft.py --model_name_or_path org/model" in llm and "docs/trl/jobs_training" in llm
     assert "transformers `Trainer`" in render("org/model", "fill-mask", "transformers", [], "train")
     assert "Sentence Transformers" in render("org/model", "sentence-similarity", "sentence-transformers", [], "train")
     assert "the evaluation result" in render("org/model", "text-generation", "transformers", [], "train")

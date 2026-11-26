@@ -31,6 +31,11 @@ OCR_WORDS = ("ocr", "docling")
 TRAIN_BY_DEFAULT = {"encoder"}
 
 SAVE = "The Job disk is deleted at the end: save checkpoints and the final model to a mounted bucket or a private repo."
+TRL = ("Use TRL (https://github.com/huggingface/trl). It ships a training script that runs on Jobs as it is: "
+       "`hf jobs uv run --detach --timeout <limit> --flavor <flavor> -- https://raw.githubusercontent.com/huggingface/trl/refs/heads/main/trl/scripts/sft.py "
+       "--model_name_or_path {repo} --dataset_name <dataset> --output_dir <dir>` (arguments: read the script; guide: https://huggingface.co/docs/trl/jobs_training). "
+       "Write your own script with `SFTTrainer` only if the data needs code that the script does not have.")
+TRAINER = "the transformers `Trainer` (https://huggingface.co/docs/transformers/trainer, source https://github.com/huggingface/transformers)"
 SERVER = "Start the model's server (vLLM or SGLang, whichever the model card or the catalogue names) inside the Job and send many requests at once to localhost. A loop over `model.generate` is several times slower."
 
 # (verb, kind) -> (what the run is, the one pointer that most changes cost or correctness, folder of ready uv scripts).
@@ -42,12 +47,12 @@ POINTERS = {
     ("infer", "classifier"): ("batch inference", "Use the transformers `pipeline` or the loading code from the model card, with batches on one small GPU.", "uv-scripts/classification"),
     ("infer", "speech"): ("transcribe audio", "Use the library from the model card. Sort the files by length before you batch them.", "uv-scripts/transcription"),
     ("infer", "other"): ("batch inference", "Use the library and the loading code from the model card. If the card has none, the library name above and the files in the repo show how to load the model.", None),
-    ("train", "llm"): ("fine-tune", f"Use TRL `SFTTrainer` (https://huggingface.co/docs/trl/sft_trainer). {SAVE}", "uv-scripts/training"),
-    ("train", "ocr"): ("fine-tune", f"Use TRL `SFTTrainer` (https://huggingface.co/docs/trl/sft_trainer) or the fine-tuning code the model card links. {SAVE}", "uv-scripts/transformers-training"),
+    ("train", "llm"): ("fine-tune", f"{TRL} {SAVE}", "uv-scripts/training"),
+    ("train", "ocr"): ("fine-tune", f"{TRL} For a vision model, check first that the script takes image data; the model card may link its own fine-tuning code. {SAVE}", "uv-scripts/transformers-training"),
     ("train", "embedding"): ("fine-tune", f"Use Sentence Transformers (https://sbert.net/docs/sentence_transformer/training_overview.html) and run an evaluator before and after. {SAVE}", "uv-scripts/embeddings"),
-    ("train", "encoder"): ("fine-tune", f"Use the transformers `Trainer` (https://huggingface.co/docs/transformers/training) for a classifier, or Sentence Transformers (https://sbert.net/docs/sentence_transformer/training_overview.html) for an embedding model. {SAVE}", "uv-scripts/classification"),
-    ("train", "classifier"): ("fine-tune", f"Use the transformers `Trainer` (https://huggingface.co/docs/transformers/training). {SAVE}", "uv-scripts/classification"),
-    ("train", "other"): ("fine-tune", f"Use the training method that the model card or its library documents. The transformers `Trainer` (https://huggingface.co/docs/transformers/training) covers most transformers models. {SAVE}", None),
+    ("train", "encoder"): ("fine-tune", f"Use {TRAINER} for a classifier, or Sentence Transformers (https://sbert.net/docs/sentence_transformer/training_overview.html) for an embedding model. transformers has no training script to run by URL: write a uv script, or read `train-classifier.py` in the scripts folder above. {SAVE}", "uv-scripts/classification"),
+    ("train", "classifier"): ("fine-tune", f"Use {TRAINER}. transformers has no training script to run by URL: write a uv script, or read `train-classifier.py` in the scripts folder above. {SAVE}", "uv-scripts/classification"),
+    ("train", "other"): ("fine-tune", f"Use the training method that the model card or its library documents. For most transformers models that is {TRAINER}. {SAVE}", None),
 }
 
 PROMPT = """# {verb_title} {repo} on Hugging Face Jobs{title}
@@ -75,7 +80,7 @@ The other verb: `hf jobplan {repo} --task {other_verb}`. The whole mapping: `hf 
 {pointer}
 
 ## Then
-1. Write one uv script with inline dependencies. Launch with `hf jobs uv run --detach --timeout <limit> --flavor <flavor> <script>`.
+1. Use a ready script if one fits. If not, write one uv script with inline dependencies. Launch with `hf jobs uv run --detach --timeout <limit> --flavor <flavor> <script>`.
 2. Run a small test first ({test}). Read the result with `hf jobs logs <id>` and open the outputs: an exit code of 0 is not a check.
 3. Say which flavor you picked and why. If `hf jobs inspect <id>` still shows SCHEDULING after 10 minutes, `hf jobs cancel <id>` and use another flavor.
 4. Run the full input. Write to the place the user named: mount a bucket with `-v` (see the help), or see `hf buckets --help`.
@@ -106,7 +111,7 @@ def render(repo: str, tag: str | None, library: str | None, tags: list[str], ver
     return PROMPT.format(
         repo=repo, name=repo.split("/")[-1], verb_title="Fine-tune" if chosen == "train" else "Run", title="" if chosen == "train" else f": {title}", facts=facts,
         other_verb="infer" if chosen == "train" else "train", custom_code=CUSTOM_CODE if "custom_code" in tags else "",
-        scripts=f"hf datasets ls {scripts}" if scripts else "hf datasets ls --author uv-scripts", pointer=pointer,
+        scripts=f"hf datasets ls {scripts}" if scripts else "hf datasets ls --author uv-scripts", pointer=pointer.replace("{repo}", repo),
         test="a few steps on a few rows" if chosen == "train" else "a few rows",
         report="the evaluation result" if chosen == "train" else "cost per 1,000 items",
     )
