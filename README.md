@@ -14,10 +14,11 @@ hf jobplan --list
 
 One mapping, in [`src/hf_jobplan/prompts.py`](src/hf_jobplan/prompts.py):
 
-1. The model's task tag on the Hub gives the kind of model (`llm`, `embedding`, `encoder`, `classifier`, `ocr`, `speech`). A tag that is not in the mapping gives the kind `other`.
+1. The model's task tag on the Hub gives the kind of model (`llm`, `embedding`, `encoder`, `classifier`, `ocr`, `speech`, `diffusion`). A tag that is not in the mapping gives the kind `other`.
 2. There are two verbs, `infer` and `train`. An encoder defaults to `train`. Every other kind defaults to `infer`. `--task` picks the other one.
-3. The verb and the kind pick one pointer: the library or server to use.
+3. The verb and the kind pick one pointer: the library or server to use. It is the first thing in the prompt.
 4. The rest of the prompt is the same for every model. Its hints are existing `hf` commands (`hf models card`, `hf jobs hardware`, `hf jobs uv run --help`, ...), so the agent reads live data with the CLI it already has. The extension makes one Hub API call and keeps no copy of prices, flavors or model cards.
+5. Outputs go to a bucket mounted into the Job (`-v hf://buckets/<namespace>/<bucket>:/out`), so the Job needs no token to save its results.
 
 Every model gets a prompt. A kind without its own pointer uses the `other` pointer for the verb ("use the library and the loading code from the model card"). If the Hub lookup fails, the command prints the same prompt without the facts line.
 
@@ -26,9 +27,11 @@ Every model gets a prompt. A kind without its own pointer uses the `other` point
 | `train` | `llm` | [TRL](https://github.com/huggingface/trl): its ready [`sft.py`](https://github.com/huggingface/trl/blob/main/trl/scripts/sft.py) script runs on Jobs as it is ([guide](https://huggingface.co/docs/trl/jobs_training)) |
 | `train` | `encoder`, `classifier` | [transformers](https://github.com/huggingface/transformers) [`Trainer`](https://huggingface.co/docs/transformers/trainer) |
 | `train` | `embedding` | [Sentence Transformers](https://sbert.net/docs/sentence_transformer/training_overview.html), with an evaluator before and after |
-| `infer` | `llm`, `ocr` | the model's server (vLLM or SGLang) inside the Job, with concurrent requests |
+| `train` | `diffusion` | the [diffusers training scripts](https://huggingface.co/docs/diffusers/training/overview) |
+| `infer` | `llm`, `ocr` | the model's server (vLLM or SGLang) inside the Job, with concurrent requests; [`saturate`](https://github.com/davanstrien/saturate) as the client |
 | `infer` | `embedding` | Sentence Transformers, or Text Embeddings Inference |
 | `infer` | `classifier` | transformers `pipeline` |
+| `infer` | `diffusion` | the diffusers pipeline from the model card |
 | either | `other` | what the model card documents |
 
 ## Example: an encoder
@@ -78,22 +81,11 @@ Use the transformers `Trainer` (https://huggingface.co/docs/transformers/trainer
 
 Everything below uses the `hf` CLI, which printed this. `hf --help` lists its commands, and every command takes `--help`.
 
+Task tag `tabular-classification`, library `None` -> kind `other`. Verb: `infer` (the default for this kind).
 ...
+## For this kind of model
 Use the library and the loading code from the model card. If the card has none, the library name above and the files in the repo show how to load the model.
-
-## Find out first (each line is an existing command)
-    hf models card autogluon/mitra-classifier --text
-        how the authors run it: library or server, container image, flags
-    hf models info autogluon/mitra-classifier
-        task, library, gated or not, parameter count and dtype (the GPU memory you need), files
-    hf endpoints catalog ls --search mitra-classifier
-        servers tested for this model, if it is listed
-    hf datasets ls --author uv-scripts
-        ready uv scripts: read one before you write one
-    hf jobs hardware
-        flavors and prices
-    hf jobs uv run --help
-        how to launch; `hf jobs run --help` if the model needs its own image
+...
 ````
 
 ## The mapping
@@ -155,7 +147,16 @@ An agent that reads the right script or model card writes correct Job commands. 
 
 ## Status
 
-Prototype. The output format and the names will change.
+Prototype. The output format, the names and the wording will change. A GGUF or adapter repo is pointed to its base model for training (read from the Hub's `base_model` tags).
+
+What has been tried so far (2026-11-26), with clean headless agents that got only a task and "install the extension, run `hf jobplan <model>`, follow it":
+
+- Plan-only runs (the agent writes the script and the exact commands, and launches nothing), 7 model and workload cases, one trial per cell, with Claude Haiku, Sonnet and Opus: all 42 agents installed the extension and followed its output. Every plan mounted the output bucket.
+- After the bucket-mount step was added, 0 of 21 plans passed a token into the Job. With the text before it, 12 of 21 did.
+- With the `saturate` clause, Sonnet used it in 3 of 3 bulk-inference plans and Opus in 2 of 3. Haiku used it in 0 of 3.
+- Two open models in another agent harness (GLM-5.3 and DeepSeek-V4.1-Flash in pi) also installed and followed it in 8 of 8 runs.
+
+Limits: one trial per cell; plan-only runs do not show that a plan works; the current order of the sections is not tested yet. Real runs on Jobs are in progress.
 
 ## Develop
 
