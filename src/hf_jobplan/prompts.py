@@ -46,8 +46,10 @@ JOBS_DOCS = "https://huggingface.co/docs/hub/jobs.md"
 # Kinds that people mostly fine-tune. Every other kind defaults to `infer`.
 TRAIN_BY_DEFAULT = {"encoder"}
 
-SAVE = "The Job disk is deleted at the end: save checkpoints and the final model to a mounted bucket or a private repo."
-TRL = ("Use TRL (https://github.com/huggingface/trl). It ships a training script that runs on Jobs as it is: "
+SAVE = "The Job disk is deleted at the end: write checkpoints and the final model to the mounted bucket (step 4)."
+SATURATE = "`saturate` (https://github.com/davanstrien/saturate) is a client for this: dataset in, concurrent requests to the server, resumable parquet out."
+TRL = ("Use TRL (https://github.com/huggingface/trl). It has examples for some models: look in https://github.com/huggingface/trl/tree/main/examples "
+       "for a folder that names this model or its family first. It also ships a general training script that runs on Jobs as it is: "
        "`hf jobs uv run --detach --timeout <limit> --flavor <flavor> -- https://raw.githubusercontent.com/huggingface/trl/refs/heads/main/trl/scripts/sft.py "
        "--model_name_or_path {repo} --dataset_name <dataset> --output_dir <dir>` (arguments: read the script; guide: https://huggingface.co/docs/trl/jobs_training.md; LoRA with PEFT: https://huggingface.co/docs/peft/quicktour.md). "
        "Write your own script with `SFTTrainer` only if the data needs code that the script does not have.")
@@ -57,8 +59,8 @@ SERVER = "Start the model's server (vLLM or SGLang, whichever the model card or 
 # (verb, kind) -> (what the run is, the one pointer that most changes cost or correctness, folder of ready uv scripts).
 # (verb, "other") is the fallback for every kind without its own entry.
 POINTERS = {
-    ("infer", "llm"): ("bulk generation, classification or extraction", SERVER, "uv-scripts/vllm"),
-    ("infer", "ocr"): ("pages to text", "Follow the model card. If it gives a vLLM or SGLang command, start that server inside the Job and send one request per page to localhost, many at once: a loop over pages is several times slower. If the model has its own library (PaddleOCR, ONNX, ...), use that library with batches.", "uv-scripts/ocr"),
+    ("infer", "llm"): ("bulk generation, classification or extraction", f"{SERVER} {SATURATE}", "uv-scripts/vllm"),
+    ("infer", "ocr"): ("pages to text", f"Follow the model card. If it gives a vLLM or SGLang command, start that server inside the Job and send one request per page to localhost, many at once: a loop over pages is several times slower. {SATURATE} If the model has its own library (PaddleOCR, ONNX, ...), use that library with batches.", "uv-scripts/ocr"),
     ("infer", "embedding"): ("embed a dataset", "Use Sentence Transformers with a large batch size and the prompt names from the model card, or Text Embeddings Inference if the catalogue lists the `tei` engine.", "uv-scripts/embeddings"),
     ("infer", "classifier"): ("batch inference", "Use the transformers `pipeline` or the loading code from the model card, with batches on one small GPU.", "uv-scripts/classification"),
     ("infer", "speech"): ("transcribe audio", "Use the library from the model card. Sort the files by length before you batch them.", "uv-scripts/transcription"),
@@ -102,7 +104,7 @@ The other verb: `hf jobplan {repo} --task {other_verb}`. The whole mapping: `hf 
 1. Use a ready script if one fits. If not, write one uv script with inline dependencies. Launch with `hf jobs uv run --detach --timeout <limit> --flavor <flavor> <script>`.
 2. Run a small test first ({test}). Read the result with `hf jobs logs <id>` and open the outputs: an exit code of 0 is not a check.
 3. Say which flavor you picked and why. If `hf jobs inspect <id>` still shows SCHEDULING after 10 minutes, `hf jobs cancel <id>` and use another flavor.
-4. Run the full input. Write to the place the user named: mount a bucket with `-v` (see the help), or see `hf buckets --help`.
+4. Run the full input. Write outputs and checkpoints to a bucket mounted into the Job: `-v hf://buckets/<namespace>/<bucket>:/out`, then write under `/out`. A bucket mount is read and write, so the Job needs no token to save its results. Create the bucket first with `hf buckets create <namespace>/<bucket>` if it does not exist. A dataset mounts the same way, read-only: `-v hf://datasets/<org>/<dataset>:/data`. Pass `--secrets HF_TOKEN` only when the Job must read a private or gated repo, or when the user asked for a model or dataset repo as the result.
 5. Report from `hf jobs inspect <id>`: Job ids, flavor, billed time, cost, {report}, and what you did not check.
 """
 
@@ -127,6 +129,10 @@ def render(repo: str, tag: str | None, library: str | None, tags: list[str], ver
     else:
         why = "" if verb else " (the default for this kind)"
         facts = f"Task tag `{tag}`, library `{library}` -> kind `{kind}`. Verb: `{chosen}`{why}."
+    # A GGUF file or an adapter cannot be fine-tuned directly. The Hub puts the base model in a tag.
+    derived = next((t.split(":", 2)[2] for t in tags if t.startswith(("base_model:quantized:", "base_model:adapter:"))), None)
+    if chosen == "train" and derived:
+        facts += f"\nThis repo is a quantized file or an adapter of `{derived}`. Fine-tune the base model: `hf jobplan {derived} --task train`."
     library_docs = LIBRARY_DOCS.get((library or "").lower())
     docs = f"Docs as markdown: Jobs {JOBS_DOCS}" + (f"; `{library}` index {library_docs}" if library_docs else "") + ". Any Hugging Face docs page is markdown if you add `.md` to its URL."
     return PROMPT.format(

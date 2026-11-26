@@ -110,3 +110,23 @@ def test_linked_docs_exist(url):
     assert status == "200", url
     if url.endswith((".md", "llms.txt")):
         assert "<!doctype html" not in body[:300].lower(), url
+
+
+def test_outputs_go_to_a_mounted_bucket_without_a_token():
+    for verb in ("infer", "train"):
+        prompt = render("org/model", "text-generation", "transformers", [], verb)
+        assert "-v hf://buckets/<namespace>/<bucket>:/out" in prompt
+        assert "needs no token to save its results" in prompt
+
+
+def test_bulk_inference_names_saturate():
+    assert "github.com/davanstrien/saturate" in render("org/model", "text-generation", "transformers", [], "infer")
+    assert "github.com/davanstrien/saturate" in render("org/some-ocr", "image-text-to-text", "transformers", [], "infer")
+    assert "saturate" not in render("org/model", "text-generation", "transformers", [], "train")
+
+
+def test_quantized_or_adapter_repo_points_to_the_base_model_for_training():
+    """Tags copied from the Hub on 2026-11-26."""
+    gguf = render("unsloth/Inkling-2-Mini-GGUF", "image-text-to-text", None, ["gguf", "base_model:thinkingmachines/Inkling-2-Mini", "base_model:quantized:thinkingmachines/Inkling-2-Mini"], "train")
+    assert "Fine-tune the base model: `hf jobplan thinkingmachines/Inkling-2-Mini --task train`" in gguf
+    assert "Fine-tune the base model" not in render("thinkingmachines/Inkling-2-Mini", "image-text-to-text", "transformers", [], "train")
