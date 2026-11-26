@@ -1,43 +1,48 @@
-"""Offline tests for the parts of `hf jobplan` that need no network."""
-from types import SimpleNamespace
+"""Offline tests: the mapping and the rendered prompt need no network."""
+import re
+import subprocess
 
-from hf_jobplan.cli import card_run_lines, default_task
+import pytest
 
-CARD = """# Model
-
-```bash
-docker run --gpus all \\
-  lmsysorg/sglang:dev-clef \\
-  sglang serve --model-path org/model
-```
-
-```python
-print("hello")
-```
-
-```bash
-pip install -U transformers
-```
-"""
+from hf_jobplan.prompts import TASK_TAG_TO_WORKLOAD, WORKLOADS, mapping_table, render, workload_for
 
 
-def test_card_blocks_keep_whole_serve_command():
-    blocks = card_run_lines(CARD)
-    assert len(blocks) == 2
-    assert "lmsysorg/sglang:dev-clef" in blocks[0] and "sglang serve" in blocks[0]
-    assert blocks[1] == "pip install -U transformers"
+def test_default_workload_by_task_tag():
+    assert workload_for("feature-extraction", "google/embeddinggemma-2", []) == "embed"
+    assert workload_for("fill-mask", "answerdotai/ModernBERT-base", []) == "train-encoder"
+    assert workload_for("image-text-to-text", "lightonai/LightOnOCR-3-0.8B", []) == "ocr"
+    assert workload_for("image-text-to-text", "thinkingmachines/Inkling-2-Mini", []) == "generate"
+    assert workload_for("some-new-tag", "org/model", []) == "generate"
 
 
-def test_card_without_run_blocks():
-    assert card_run_lines("# Model\n\nNo code here.\n") == []
+def test_every_mapped_workload_exists():
+    assert set(TASK_TAG_TO_WORKLOAD.values()) <= set(WORKLOADS)
+    assert all(entry["other"] in WORKLOADS for entry in WORKLOADS.values())
 
 
-def info(model_id, tag, tags=()):
-    return SimpleNamespace(id=model_id, pipeline_tag=tag, tags=list(tags))
+def test_training_prompt_reports_evaluation_and_inference_reports_unit_cost():
+    train = render("answerdotai/ModernBERT-base", "fill-mask", "transformers", [], None)
+    assert "the evaluation result" in train and "cost per 1,000" not in train
+    embed = render("google/embeddinggemma-2", "feature-extraction", "sentence-transformers", [], None)
+    assert "cost per 1,000 texts" in embed and "(the default for this task tag)" in embed
 
 
-def test_default_task_by_model_kind():
-    assert default_task(info("google/embeddinggemma-2", "feature-extraction")) == "embed"
-    assert default_task(info("answerdotai/ModernBERT-base", "fill-mask")) == "train-encoder"
-    assert default_task(info("lightonai/LightOnOCR-3-0.8B", "image-text-to-text")) == "ocr"
-    assert default_task(info("thinkingmachines/Inkling-2-Mini", "image-text-to-text")) == "generate"
+def test_custom_code_warning_only_when_tagged():
+    assert "Do not pass a token" in render("org/model", "text-generation", "transformers", ["custom_code"], "train-llm")
+    assert "Do not pass a token" not in render("org/model", "text-generation", "transformers", [], "train-llm")
+
+
+def test_mapping_table_lists_every_workload():
+    table = mapping_table()
+    assert all(name in table for name in WORKLOADS)
+
+
+@pytest.mark.parametrize("workload", list(WORKLOADS))
+def test_hinted_hf_commands_exist(workload):
+    """Each `hf ...` hint in the prompt names a real command: its --help must exit 0."""
+    prompt = render("org/model", "text-generation", "transformers", [], workload)
+    commands = set(re.findall(r"`?(hf (?:models|datasets|endpoints|jobs|buckets)(?: (?:card|ls|catalog ls|hardware|uv run|run|logs|inspect|cancel))?)", prompt))
+    assert len(commands) >= 8
+    for command in commands:
+        done = subprocess.run([*command.split(), "--help"], check=False, capture_output=True, text=True)
+        assert done.returncode == 0, command
