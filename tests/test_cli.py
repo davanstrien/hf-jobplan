@@ -4,16 +4,17 @@ import subprocess
 
 import pytest
 
-from hf_jobplan.prompts import POINTERS, TASK_TAG_TO_KIND, kind_of, mapping_table, render
+from hf_jobplan.prompts import JOBS_DOCS, LIBRARY_DOCS, POINTERS, TASK_TAG_TO_KIND, kind_of, mapping_table, render
 
 KINDS = sorted({*TASK_TAG_TO_KIND.values(), "ocr", "other"})
+URLS = sorted({url.rstrip(".,;)") for _, (_, pointer, _) in POINTERS.items() for url in re.findall(r"https://[^\s`]+", pointer)} | set(LIBRARY_DOCS.values()) | {JOBS_DOCS})
 
 
 def test_kind_by_task_tag_with_fallback():
     assert kind_of("feature-extraction", "google/embeddinggemma-2", []) == "embedding"
     assert kind_of("fill-mask", "answerdotai/ModernBERT-base", []) == "encoder"
     assert kind_of("image-text-to-text", "lightonai/LightOnOCR-3-0.8B", []) == "ocr"
-    assert kind_of("text-to-image", "org/model", []) == "other"
+    assert kind_of("tabular-classification", "org/model", []) == "other"
     assert kind_of(None, "org/model", []) == "other"
 
 
@@ -44,7 +45,7 @@ def test_both_verbs_have_a_fallback():
 @pytest.mark.parametrize("kind", KINDS)
 @pytest.mark.parametrize("verb", ["infer", "train", None])
 def test_every_kind_and_verb_renders(kind, verb):
-    tag = next((t for t, k in TASK_TAG_TO_KIND.items() if k == kind), "text-to-image")
+    tag = next((t for t, k in TASK_TAG_TO_KIND.items() if k == kind), "tabular-classification")
     repo = "org/some-ocr" if kind == "ocr" else "org/model"
     prompt = render(repo, tag, "transformers", [], verb)
     assert "hf jobs uv run --detach" in prompt and "{" not in prompt and "}" not in prompt
@@ -89,3 +90,23 @@ def test_hinted_hf_commands_exist():
     for command in commands:
         done = subprocess.run([*command.split(), "--help"], check=False, capture_output=True, text=True)
         assert done.returncode == 0, command
+
+
+def test_diffusion_models_get_diffusers():
+    assert "diffusers pipeline" in render("black-forest-labs/FLUX.1-dev", "text-to-image", "diffusers", [], None)
+    assert "docs/diffusers/training/lora.md" in render("black-forest-labs/FLUX.1-dev", "text-to-image", "diffusers", [], "train")
+
+
+def test_docs_line_follows_the_library():
+    assert "`diffusers` index https://huggingface.co/docs/diffusers/llms.txt" in render("org/model", "text-to-image", "diffusers", [], None)
+    assert "index" not in render("org/model", "tabular-classification", "some-new-lib", [], None).split("Docs as markdown")[1].split("\n")[0]
+
+
+@pytest.mark.parametrize("url", URLS)
+def test_linked_docs_exist(url):
+    """Network test. The Hub answers 200 with an HTML page for a docs page that does not exist, so check the body too."""
+    done = subprocess.run(["curl", "-sL", "-w", "\n%{http_code}", url.replace("{repo}", "org/model")], check=False, capture_output=True, text=True)
+    body, _, status = done.stdout.rpartition("\n")
+    assert status == "200", url
+    if url.endswith((".md", "llms.txt")):
+        assert "<!doctype html" not in body[:300].lower(), url

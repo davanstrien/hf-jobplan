@@ -41,6 +41,7 @@ Every model gets a prompt. A kind without its own pointer uses the `other` point
 Everything below uses the `hf` CLI, which printed this. `hf --help` lists its commands, and every command takes `--help`.
 
 Task tag `fill-mask`, library `transformers` -> kind `encoder`. Verb: `train` (the default for this kind).
+Docs as markdown: Jobs https://huggingface.co/docs/hub/jobs.md; `transformers` index https://huggingface.co/docs/transformers/llms.txt. Any Hugging Face docs page is markdown if you add `.md` to its URL.
 The other verb: `hf jobplan answerdotai/ModernBERT-base --task infer`. The whole mapping: `hf jobplan --list`.
 
 ## Find out first (each line is an existing command)
@@ -58,7 +59,7 @@ The other verb: `hf jobplan answerdotai/ModernBERT-base --task infer`. The whole
         how to launch; `hf jobs run --help` if the model needs its own image
 
 ## For this kind of model
-Use the transformers `Trainer` (https://huggingface.co/docs/transformers/trainer, source https://github.com/huggingface/transformers) for a classifier, or Sentence Transformers (https://sbert.net/docs/sentence_transformer/training_overview.html) for an embedding model. transformers has no training script to run by URL: write a uv script, or read `train-classifier.py` in the scripts folder above. The Job disk is deleted at the end: save checkpoints and the final model to a mounted bucket or a private repo.
+Use the transformers `Trainer` (https://huggingface.co/docs/transformers/trainer.md, source https://github.com/huggingface/transformers) for a classifier, or Sentence Transformers (https://raw.githubusercontent.com/huggingface/sentence-transformers/main/docs/sentence_transformer/training_overview.md) for an embedding model. transformers has no training script to run by URL: write a uv script, or read `train-classifier.py` in the scripts folder above. The Job disk is deleted at the end: save checkpoints and the final model to a mounted bucket or a private repo.
 
 ## Then
 1. Use a ready script if one fits. If not, write one uv script with inline dependencies. Launch with `hf jobs uv run --detach --timeout <limit> --flavor <flavor> <script>`.
@@ -70,10 +71,10 @@ Use the transformers `Trainer` (https://huggingface.co/docs/transformers/trainer
 
 ## Example: the fallback
 
-`hf jobplan black-forest-labs/FLUX.1-dev` has a task tag that is not in the mapping. The top of the output and the pointer:
+`hf jobplan autogluon/mitra-classifier` has a task tag that is not in the mapping. The top of the output and the pointer:
 
 ````
-# Run black-forest-labs/FLUX.1-dev on Hugging Face Jobs: batch inference
+# Run autogluon/mitra-classifier on Hugging Face Jobs: batch inference
 
 Everything below uses the `hf` CLI, which printed this. `hf --help` lists its commands, and every command takes `--help`.
 
@@ -101,10 +102,16 @@ Hub task tag -> kind of model
   image-classification           classifier
   object-detection               classifier
   automatic-speech-recognition   speech
+  text-to-image                  diffusion
+  image-to-image                 diffusion
+  text-to-video                  diffusion
+  image-to-video                 diffusion
   (an OCR tag or name, see below) ocr
   (any other tag, or no tag)     other
 
 OCR tags: document-ai, document-parse, document-parsing, document-understanding, handwriting-recognition, ocr, pdf2markdown; or `ocr` / `docling` in the model id or a tag.
+
+Docs index per library: transformers, trl, peft, diffusers, timm, sentence-transformers
 
 Default verb: train for encoder; infer for every other kind.
 
@@ -115,12 +122,14 @@ Default verb: train for encoder; infer for every other kind.
   infer  embedding   Use Sentence Transformers with a large batch size and the prompt names from the model card, or Text Embeddings Inference if the catalogue lists the `tei` engine.
   infer  classifier  Use the transformers `pipeline` or the loading code from the model card, with batches on one small GPU.
   infer  speech      Use the library from the model card.
+  infer  diffusion   Use the diffusers pipeline from the model card (https://huggingface.co/docs/diffusers/index.md).
   infer  other       Use the library and the loading code from the model card.
   train  llm         Use TRL (https://github.com/huggingface/trl).
   train  ocr         Use TRL (https://github.com/huggingface/trl).
-  train  embedding   Use Sentence Transformers (https://sbert.net/docs/sentence_transformer/training_overview.html) and run an evaluator before and after.
-  train  encoder     Use the transformers `Trainer` (https://huggingface.co/docs/transformers/trainer, source https://github.com/huggingface/transformers) for a classifier, or Sentence Transformers (https://sbert.net/docs/sentence_transformer/training_overview.html) for an embedding model.
-  train  classifier  Use the transformers `Trainer` (https://huggingface.co/docs/transformers/trainer, source https://github.com/huggingface/transformers).
+  train  embedding   Use Sentence Transformers (https://raw.githubusercontent.com/huggingface/sentence-transformers/main/docs/sentence_transformer/training_overview.md) and run an evaluator before and after.
+  train  encoder     Use the transformers `Trainer` (https://huggingface.co/docs/transformers/trainer.md, source https://github.com/huggingface/transformers) for a classifier, or Sentence Transformers (https://raw.githubusercontent.com/huggingface/sentence-transformers/main/docs/sentence_transformer/training_overview.md) for an embedding model.
+  train  classifier  Use the transformers `Trainer` (https://huggingface.co/docs/transformers/trainer.md, source https://github.com/huggingface/transformers).
+  train  diffusion   Use the diffusers training scripts (overview: https://huggingface.co/docs/diffusers/training/overview.md, LoRA: https://huggingface.co/docs/diffusers/training/lora.md, scripts: https://github.com/huggingface/diffusers/tree/main/examples).
   train  other       Use the training method that the model card or its library documents.
 ```
 

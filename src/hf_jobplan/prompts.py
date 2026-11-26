@@ -20,6 +20,10 @@ TASK_TAG_TO_KIND = {
     "image-classification": "classifier",
     "object-detection": "classifier",
     "automatic-speech-recognition": "speech",
+    "text-to-image": "diffusion",
+    "image-to-image": "diffusion",
+    "text-to-video": "diffusion",
+    "image-to-video": "diffusion",
 }
 
 # OCR and document-parsing models share task tags with general VLMs, so the task tag cannot find them.
@@ -27,15 +31,27 @@ TASK_TAG_TO_KIND = {
 OCR_TAGS = {"ocr", "document-parse", "document-parsing", "document-understanding", "pdf2markdown", "document-ai", "handwriting-recognition"}
 OCR_WORDS = ("ocr", "docling")
 
+# Docs an agent can read as text. Hugging Face docs serve each page as markdown (add `.md` to the URL)
+# and an index of all pages at `llms.txt`. Keyed by the `library_name` of the model.
+LIBRARY_DOCS = {
+    "transformers": "https://huggingface.co/docs/transformers/llms.txt",
+    "trl": "https://huggingface.co/docs/trl/llms.txt",
+    "peft": "https://huggingface.co/docs/peft/llms.txt",
+    "diffusers": "https://huggingface.co/docs/diffusers/llms.txt",
+    "timm": "https://huggingface.co/docs/timm/llms.txt",
+    "sentence-transformers": "https://github.com/huggingface/sentence-transformers/tree/main/docs",
+}
+JOBS_DOCS = "https://huggingface.co/docs/hub/jobs.md"
+
 # Kinds that people mostly fine-tune. Every other kind defaults to `infer`.
 TRAIN_BY_DEFAULT = {"encoder"}
 
 SAVE = "The Job disk is deleted at the end: save checkpoints and the final model to a mounted bucket or a private repo."
 TRL = ("Use TRL (https://github.com/huggingface/trl). It ships a training script that runs on Jobs as it is: "
        "`hf jobs uv run --detach --timeout <limit> --flavor <flavor> -- https://raw.githubusercontent.com/huggingface/trl/refs/heads/main/trl/scripts/sft.py "
-       "--model_name_or_path {repo} --dataset_name <dataset> --output_dir <dir>` (arguments: read the script; guide: https://huggingface.co/docs/trl/jobs_training). "
+       "--model_name_or_path {repo} --dataset_name <dataset> --output_dir <dir>` (arguments: read the script; guide: https://huggingface.co/docs/trl/jobs_training.md; LoRA with PEFT: https://huggingface.co/docs/peft/quicktour.md). "
        "Write your own script with `SFTTrainer` only if the data needs code that the script does not have.")
-TRAINER = "the transformers `Trainer` (https://huggingface.co/docs/transformers/trainer, source https://github.com/huggingface/transformers)"
+TRAINER = "the transformers `Trainer` (https://huggingface.co/docs/transformers/trainer.md, source https://github.com/huggingface/transformers)"
 SERVER = "Start the model's server (vLLM or SGLang, whichever the model card or the catalogue names) inside the Job and send many requests at once to localhost. A loop over `model.generate` is several times slower."
 
 # (verb, kind) -> (what the run is, the one pointer that most changes cost or correctness, folder of ready uv scripts).
@@ -46,12 +62,14 @@ POINTERS = {
     ("infer", "embedding"): ("embed a dataset", "Use Sentence Transformers with a large batch size and the prompt names from the model card, or Text Embeddings Inference if the catalogue lists the `tei` engine.", "uv-scripts/embeddings"),
     ("infer", "classifier"): ("batch inference", "Use the transformers `pipeline` or the loading code from the model card, with batches on one small GPU.", "uv-scripts/classification"),
     ("infer", "speech"): ("transcribe audio", "Use the library from the model card. Sort the files by length before you batch them.", "uv-scripts/transcription"),
+    ("infer", "diffusion"): ("batch generation", "Use the diffusers pipeline from the model card (https://huggingface.co/docs/diffusers/index.md). Load the pipeline once, send prompts in batches, and write each output file as it is made.", None),
     ("infer", "other"): ("batch inference", "Use the library and the loading code from the model card. If the card has none, the library name above and the files in the repo show how to load the model.", None),
     ("train", "llm"): ("fine-tune", f"{TRL} {SAVE}", "uv-scripts/training"),
     ("train", "ocr"): ("fine-tune", f"{TRL} For a vision model, check first that the script takes image data; the model card may link its own fine-tuning code. {SAVE}", "uv-scripts/transformers-training"),
-    ("train", "embedding"): ("fine-tune", f"Use Sentence Transformers (https://sbert.net/docs/sentence_transformer/training_overview.html) and run an evaluator before and after. {SAVE}", "uv-scripts/embeddings"),
-    ("train", "encoder"): ("fine-tune", f"Use {TRAINER} for a classifier, or Sentence Transformers (https://sbert.net/docs/sentence_transformer/training_overview.html) for an embedding model. transformers has no training script to run by URL: write a uv script, or read `train-classifier.py` in the scripts folder above. {SAVE}", "uv-scripts/classification"),
+    ("train", "embedding"): ("fine-tune", f"Use Sentence Transformers (https://raw.githubusercontent.com/huggingface/sentence-transformers/main/docs/sentence_transformer/training_overview.md) and run an evaluator before and after. {SAVE}", "uv-scripts/embeddings"),
+    ("train", "encoder"): ("fine-tune", f"Use {TRAINER} for a classifier, or Sentence Transformers (https://raw.githubusercontent.com/huggingface/sentence-transformers/main/docs/sentence_transformer/training_overview.md) for an embedding model. transformers has no training script to run by URL: write a uv script, or read `train-classifier.py` in the scripts folder above. {SAVE}", "uv-scripts/classification"),
     ("train", "classifier"): ("fine-tune", f"Use {TRAINER}. transformers has no training script to run by URL: write a uv script, or read `train-classifier.py` in the scripts folder above. {SAVE}", "uv-scripts/classification"),
+    ("train", "diffusion"): ("fine-tune", f"Use the diffusers training scripts (overview: https://huggingface.co/docs/diffusers/training/overview.md, LoRA: https://huggingface.co/docs/diffusers/training/lora.md, scripts: https://github.com/huggingface/diffusers/tree/main/examples). {SAVE}", None),
     ("train", "other"): ("fine-tune", f"Use the training method that the model card or its library documents. For most transformers models that is {TRAINER}. {SAVE}", None),
 }
 
@@ -60,6 +78,7 @@ PROMPT = """# {verb_title} {repo} on Hugging Face Jobs{title}
 Everything below uses the `hf` CLI, which printed this. `hf --help` lists its commands, and every command takes `--help`.
 
 {facts}
+{docs}
 The other verb: `hf jobplan {repo} --task {other_verb}`. The whole mapping: `hf jobplan --list`.
 {custom_code}
 ## Find out first (each line is an existing command)
@@ -108,7 +127,10 @@ def render(repo: str, tag: str | None, library: str | None, tags: list[str], ver
     else:
         why = "" if verb else " (the default for this kind)"
         facts = f"Task tag `{tag}`, library `{library}` -> kind `{kind}`. Verb: `{chosen}`{why}."
+    library_docs = LIBRARY_DOCS.get((library or "").lower())
+    docs = f"Docs as markdown: Jobs {JOBS_DOCS}" + (f"; `{library}` index {library_docs}" if library_docs else "") + ". Any Hugging Face docs page is markdown if you add `.md` to its URL."
     return PROMPT.format(
+        docs=docs,
         repo=repo, name=repo.split("/")[-1], verb_title="Fine-tune" if chosen == "train" else "Run", title="" if chosen == "train" else f": {title}", facts=facts,
         other_verb="infer" if chosen == "train" else "train", custom_code=CUSTOM_CODE if "custom_code" in tags else "",
         scripts=f"hf datasets ls {scripts}" if scripts else "hf datasets ls --author uv-scripts", pointer=pointer.replace("{repo}", repo),
@@ -122,6 +144,7 @@ def mapping_table() -> str:
     lines += [f"  {tag:<30} {kind}" for tag, kind in TASK_TAG_TO_KIND.items()]
     lines += [f"  {'(an OCR tag or name, see below)':<30} ocr", f"  {'(any other tag, or no tag)':<30} other", ""]
     lines += [f"OCR tags: {', '.join(sorted(OCR_TAGS))}; or `ocr` / `docling` in the model id or a tag.", ""]
+    lines += ["Docs index per library: " + ", ".join(LIBRARY_DOCS), ""]
     lines += [f"Default verb: train for {', '.join(sorted(TRAIN_BY_DEFAULT))}; infer for every other kind.", "", "(verb, kind) -> pointer", ""]
     lines += [f"  {verb:<6} {kind:<11} {pointer.split('. ')[0].rstrip('.')}." for (verb, kind), (_, pointer, _) in POINTERS.items()]
     return "\n".join(lines)
