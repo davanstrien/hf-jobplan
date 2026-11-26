@@ -151,10 +151,10 @@ Prototype. The output format, the names and the wording will change. A GGUF or a
 
 What has been tried so far (2026-11-26), with clean headless agents that got only a task and "install the extension, run `hf jobplan <model>`, follow it":
 
-- Plan-only runs (the agent writes the script and the exact commands, and launches nothing), 7 model and workload cases, one trial per cell, with Claude Haiku, Sonnet and Opus: all 42 agents installed the extension and followed its output. Every plan mounted the output bucket.
+- Plan-only runs (the agent writes the script and the exact commands, and launches nothing), 7 model and workload cases, one trial per cell, with Claude Haiku, Sonnet and Opus: all 42 agents installed the extension and ran it. With the current text, all 21 plans mounted the output bucket.
 - After the bucket-mount step was added, 0 of 21 plans passed a token into the Job. With the text before it, 12 of 21 did.
 - With the `saturate` clause, Sonnet used it in 3 of 3 bulk-inference plans and Opus in 2 of 3. Haiku used it in 0 of 3.
-- Two open models in another agent harness (GLM-5.3 and DeepSeek-V4.1-Flash in pi) also installed and followed it in 8 of 8 runs.
+- Two open models in another agent harness (GLM-5.3 and DeepSeek-V4.1-Flash in pi) also installed it in 8 of 8 runs, and 7 of the 8 wrote a complete plan.
 
 Limits: one trial per cell; plan-only runs do not show that a plan works; the current order of the sections is not tested yet. Real runs on Jobs are in progress.
 
