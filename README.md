@@ -162,16 +162,31 @@ An agent that reads the right script or model card writes correct Job commands. 
 
 ## Status
 
-Prototype. The output format, the names and the wording will change. A GGUF or adapter repo is pointed to its base model for training (read from the Hub's `base_model` tags).
+Prototype. The output format, the names and the wording will change.
 
-What has been tried so far (2026-11-26), with clean headless agents that got only a task and "install the extension, run `hf jobplan <model>`, follow it":
+What has been tried so far (2026-11-26). The agents were clean headless sessions that got only the prompt. One trial per cell.
 
-- Plan-only runs (the agent writes the script and the exact commands, and launches nothing), 7 model and workload cases, one trial per cell, with Claude Haiku, Sonnet and Opus: all 42 agents installed the extension and ran it. With the current text, all 21 plans mounted the output bucket.
+**The long output (`hf jobplan <model>`), plan-only.** The agent writes the script and the exact commands and launches nothing. 7 model and workload cases, with Claude Haiku, Sonnet and Opus.
+
+- All 42 agents installed the extension and ran it.
 - After the bucket-mount step was added, 0 of 21 plans passed a token into the Job. With the text before it, 12 of 21 did.
 - With the `saturate` clause, Sonnet used it in 3 of 3 bulk-inference plans and Opus in 2 of 3. Haiku used it in 0 of 3.
 - Two open models in another agent harness (GLM-5.3 and DeepSeek-V4.1-Flash in pi) also installed it in 8 of 8 runs, and 7 of the 8 wrote a complete plan.
 
-Limits: one trial per cell; plan-only runs do not show that a plan works; the current order of the sections is not tested yet. Real runs on Jobs are in progress.
+**A short prompt with the same three ideas, plan-only.** The wording was close to `--short`, with the token rule as a full sentence. Same 7 cases and 3 agents, 21 runs, compared with a bare request ("do this task with this model on Jobs").
+
+- A server for bulk LLM and OCR inference: 6 of 6 plans, against 0 of 6 for the bare request (those used vLLM in-process).
+- A token passed into the Job: 1 of 21 plans, against 17 of 21 for the bare request.
+- The expected training library: 9 of 9 plans, the same as the bare request.
+
+**Real runs on Jobs.** Six agents (Sonnet and Opus) classified 5,000 texts with `thinkingmachines/Inkling-2-Mini`, from a longer prompt with the same pointer and bucket lines, not from this extension.
+
+- All six finished. The four that served the model inside the Job passed no token and wrote their results through the bucket mount.
+- Cost was $0.07 to $0.08 per 1,000 texts with a server inside the Job, and $0.11 to $0.13 with the model on an Inference Endpoint.
+- `saturate` against a hand-written client, same endpoint and hardware: 22.5 against 17.8 texts per second, one run each.
+- No agent found the request form that stops the model from reasoning before it answers. That made every run several times slower than a tuned run of the same model.
+
+Limits: one trial per cell; a plan-only run does not show that a plan works; the exact `--short` text and the current section order of the long output have no finished test yet; the real runs cover one model and one task.
 
 ## Develop
 
