@@ -104,11 +104,11 @@ The other verb: `hf jobplan {repo} --task {other_verb}`. The whole mapping: `hf 
 1. Use a ready script if one fits. If not, write one uv script with inline dependencies. Launch with `hf jobs uv run --detach --timeout <limit> --flavor <flavor> <script>`.
 2. Run a small test first ({test}). Read the result with `hf jobs logs <id>` and open the outputs: an exit code of 0 is not a check.
 3. Say which flavor you picked and why. If `hf jobs inspect <id>` still shows SCHEDULING after 10 minutes, `hf jobs cancel <id>` and use another flavor.
-4. Run the full input. Write outputs and checkpoints to a bucket mounted into the Job: `-v hf://buckets/<namespace>/<bucket>:/out`, then write under `/out`. A bucket mount is read and write, so the Job needs no token to save its results. Create the bucket first with `hf buckets create <namespace>/<bucket>` if it does not exist. A dataset mounts the same way, read-only: `-v hf://datasets/<org>/<dataset>:/data`. Pass `--secrets HF_TOKEN` only when the Job must read a private or gated repo, or when the user asked for a model or dataset repo as the result.
+4. Run the full input. Write outputs and checkpoints to a bucket mounted into the Job: `-v hf://buckets/<namespace>/<bucket>:/out`, then write under `/out`. A bucket mount is read and write, so the Job needs no token to save its results. Create the bucket first with `hf buckets create <namespace>/<bucket>` if it does not exist. A dataset mounts the same way, read-only: `-v hf://datasets/<org>/<dataset>:/data`. Pass `--secrets HF_TOKEN` only when the Job must read a gated or private model or dataset, or when the user asked for a model or dataset repo as the result.
 5. Report from `hf jobs inspect <id>`: Job ids, flavor, billed time, cost, {report}, and what you did not check.
 """
 
-CUSTOM_CODE = "\nThis repo runs its own code (`custom_code`). Do not pass a token or a secret to a Job that loads it.\n"
+CUSTOM_CODE = "\nThis repo runs its own code (`custom_code`). Do not pass your normal token or a secret to a Job that loads it.\n"
 
 
 def kind_of(tag: str | None, repo: str, tags: list[str]) -> str:
@@ -119,7 +119,7 @@ def kind_of(tag: str | None, repo: str, tags: list[str]) -> str:
     return TASK_TAG_TO_KIND.get(tag or "", "other")
 
 
-def render(repo: str, tag: str | None, library: str | None, tags: list[str], verb: str | None, found: bool = True) -> str:
+def render(repo: str, tag: str | None, library: str | None, tags: list[str], verb: str | None, found: bool = True, gated: bool = False) -> str:
     """The prompt for one model. `found=False` means the Hub lookup failed: print the fallback."""
     kind = kind_of(tag, repo, tags)
     chosen = verb or ("train" if kind in TRAIN_BY_DEFAULT else "infer")
@@ -133,6 +133,9 @@ def render(repo: str, tag: str | None, library: str | None, tags: list[str], ver
     derived = next((t.split(":", 2)[2] for t in tags if t.startswith(("base_model:quantized:", "base_model:adapter:"))), None)
     if chosen == "train" and derived:
         facts += f"\nThis repo is a quantized file or an adapter of `{derived}`. Fine-tune the base model: `hf jobplan {derived} --task train`."
+    if gated:
+        facts += (f"\nThis model is gated. Accept its terms at https://huggingface.co/{repo} first. The Job needs a token to download it: pass `--secrets HF_TOKEN`"
+                  + (", and because the repo also runs its own code, use a fine-grained token that can only read this repo." if "custom_code" in tags else "."))
     library_docs = LIBRARY_DOCS.get((library or "").lower())
     docs = f"Docs as markdown: Jobs {JOBS_DOCS}" + (f"; `{library}` index {library_docs}" if library_docs else "") + ". Any Hugging Face docs page is markdown if you add `.md` to its URL."
     return PROMPT.format(

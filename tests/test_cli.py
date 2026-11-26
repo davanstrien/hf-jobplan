@@ -70,8 +70,8 @@ def test_lookup_failure_prints_the_fallback():
 
 
 def test_custom_code_warning_only_when_tagged():
-    assert "Do not pass a token" in render("org/model", "text-generation", "transformers", ["custom_code"], "train")
-    assert "Do not pass a token" not in render("org/model", "text-generation", "transformers", [], "train")
+    assert "Do not pass your normal token" in render("org/model", "text-generation", "transformers", ["custom_code"], "train")
+    assert "Do not pass your normal token" not in render("org/model", "text-generation", "transformers", [], "train")
 
 
 def test_prompt_names_the_cli():
@@ -136,3 +136,11 @@ def test_pointer_comes_before_the_command_list():
     """In plan-only tests the pointer changed the path more often when it was near the top of the prompt."""
     prompt = render("org/model", "text-generation", "transformers", [], "infer")
     assert prompt.index("## For this kind of model") < prompt.index("## Find out first")
+
+
+def test_gated_model_says_a_token_is_needed():
+    gated = render("org/model", "text-generation", "transformers", [], "infer", gated=True)
+    assert "This model is gated" in gated and "pass `--secrets HF_TOKEN`." in gated
+    assert "This model is gated" not in render("org/model", "text-generation", "transformers", [], "infer")
+    both = render("org/model", "text-generation", "transformers", ["custom_code"], "infer", gated=True)
+    assert "fine-grained token that can only read this repo" in both

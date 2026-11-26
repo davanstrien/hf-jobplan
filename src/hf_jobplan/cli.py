@@ -26,11 +26,11 @@ def main() -> None:
     if not args.model:
         parser.error("give a model id, or --list")
     try:
-        info = HfApi().model_info(args.model, expand=["pipeline_tag", "library_name", "tags"])
+        info = HfApi().model_info(args.model, expand=["pipeline_tag", "library_name", "tags", "gated"])
     except HfHubHTTPError:
         print(render(args.model, None, None, [], args.task, found=False))
         return
-    print(render(args.model, info.pipeline_tag, info.library_name, info.tags or [], args.task))
+    print(render(args.model, info.pipeline_tag, info.library_name, info.tags or [], args.task, gated=bool(info.gated)))
 
 
 if __name__ == "__main__":
