@@ -4,45 +4,63 @@ import subprocess
 
 import pytest
 
-from hf_jobplan.prompts import TASK_TAG_TO_WORKLOAD, WORKLOADS, mapping_table, render, workload_for
+from hf_jobplan.prompts import POINTERS, TASK_TAG_TO_KIND, kind_of, mapping_table, render
+
+KINDS = sorted({*TASK_TAG_TO_KIND.values(), "ocr", "other"})
 
 
-def test_default_workload_by_task_tag():
-    assert workload_for("feature-extraction", "google/embeddinggemma-2", []) == "embed"
-    assert workload_for("fill-mask", "answerdotai/ModernBERT-base", []) == "train-encoder"
-    assert workload_for("image-text-to-text", "lightonai/LightOnOCR-3-0.8B", []) == "ocr"
-    assert workload_for("image-text-to-text", "thinkingmachines/Inkling-2-Mini", []) == "generate"
-    assert workload_for("some-new-tag", "org/model", []) == "generate"
+def test_kind_by_task_tag_with_fallback():
+    assert kind_of("feature-extraction", "google/embeddinggemma-2", []) == "embedding"
+    assert kind_of("fill-mask", "answerdotai/ModernBERT-base", []) == "encoder"
+    assert kind_of("image-text-to-text", "lightonai/LightOnOCR-3-0.8B", []) == "ocr"
+    assert kind_of("text-to-image", "org/model", []) == "other"
+    assert kind_of(None, "org/model", []) == "other"
 
 
-def test_every_mapped_workload_exists():
-    assert set(TASK_TAG_TO_WORKLOAD.values()) <= set(WORKLOADS)
-    assert all(entry["other"] in WORKLOADS for entry in WORKLOADS.values())
+def test_both_verbs_have_a_fallback():
+    assert ("infer", "other") in POINTERS and ("train", "other") in POINTERS
 
 
-def test_training_prompt_reports_evaluation_and_inference_reports_unit_cost():
-    train = render("answerdotai/ModernBERT-base", "fill-mask", "transformers", [], None)
-    assert "the evaluation result" in train and "cost per 1,000" not in train
-    embed = render("google/embeddinggemma-2", "feature-extraction", "sentence-transformers", [], None)
-    assert "cost per 1,000 texts" in embed and "(the default for this task tag)" in embed
+@pytest.mark.parametrize("kind", KINDS)
+@pytest.mark.parametrize("verb", ["infer", "train", None])
+def test_every_kind_and_verb_renders(kind, verb):
+    tag = next((t for t, k in TASK_TAG_TO_KIND.items() if k == kind), "text-to-image")
+    repo = "org/some-ocr" if kind == "ocr" else "org/model"
+    prompt = render(repo, tag, "transformers", [], verb)
+    assert "hf jobs uv run --detach" in prompt and "{" not in prompt
+
+
+def test_default_verb_is_train_for_an_encoder_and_infer_for_the_rest():
+    assert "Verb: `train` (the default for this kind)" in render("answerdotai/ModernBERT-base", "fill-mask", "transformers", [], None)
+    assert "Verb: `infer` (the default for this kind)" in render("google/embeddinggemma-2", "feature-extraction", "sentence-transformers", [], None)
+
+
+def test_training_names_the_library():
+    assert "TRL `SFTTrainer`" in render("org/model", "text-generation", "transformers", [], "train")
+    assert "transformers `Trainer`" in render("org/model", "fill-mask", "transformers", [], "train")
+    assert "Sentence Transformers" in render("org/model", "sentence-similarity", "sentence-transformers", [], "train")
+    assert "the evaluation result" in render("org/model", "text-generation", "transformers", [], "train")
+
+
+def test_lookup_failure_prints_the_fallback():
+    prompt = render("org/private-model", None, None, [], None, found=False)
+    assert "lookup for this model failed" in prompt and "hf jobs uv run --detach" in prompt
 
 
 def test_custom_code_warning_only_when_tagged():
-    assert "Do not pass a token" in render("org/model", "text-generation", "transformers", ["custom_code"], "train-llm")
-    assert "Do not pass a token" not in render("org/model", "text-generation", "transformers", [], "train-llm")
+    assert "Do not pass a token" in render("org/model", "text-generation", "transformers", ["custom_code"], "train")
+    assert "Do not pass a token" not in render("org/model", "text-generation", "transformers", [], "train")
 
 
-def test_mapping_table_lists_every_workload():
-    table = mapping_table()
-    assert all(name in table for name in WORKLOADS)
+def test_mapping_table_lists_every_pointer():
+    assert mapping_table().count("\n  infer") + mapping_table().count("\n  train") == len(POINTERS)
 
 
-@pytest.mark.parametrize("workload", list(WORKLOADS))
-def test_hinted_hf_commands_exist(workload):
+def test_hinted_hf_commands_exist():
     """Each `hf ...` hint in the prompt names a real command: its --help must exit 0."""
-    prompt = render("org/model", "text-generation", "transformers", [], workload)
-    commands = set(re.findall(r"`?(hf (?:models|datasets|endpoints|jobs|buckets)(?: (?:card|ls|catalog ls|hardware|uv run|run|logs|inspect|cancel))?)", prompt))
-    assert len(commands) >= 8
+    prompt = render("org/model", "text-to-image", "diffusers", [], None)
+    commands = set(re.findall(r"(hf (?:models card|models ls|endpoints catalog ls|datasets ls|jobs hardware|jobs uv run|jobs run|jobs logs|jobs inspect|jobs cancel|buckets))", prompt))
+    assert len(commands) == 11
     for command in commands:
         done = subprocess.run([*command.split(), "--help"], check=False, capture_output=True, text=True)
         assert done.returncode == 0, command
