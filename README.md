@@ -6,24 +6,24 @@ Experimental `hf` CLI extension. `hf jobplan <model>` prints a short prompt for 
 hf extensions install davanstrien/hf-jobplan
 hf jobplan thinkingmachines/Inkling-2-Mini              # an LLM: bulk inference by default
 hf jobplan thinkingmachines/Inkling-2-Mini --task train # fine-tune it
-hf jobplan thinkingmachines/Inkling-2-Mini --short      # the one-sentence prompt
+hf jobplan thinkingmachines/Inkling-2-Mini --short      # the one-sentence prompt (add --dataset and --bucket)
 hf jobplan answerdotai/ModernBERT-base                  # an encoder: fine-tuning by default
 hf jobplan --list
 ```
 
 ## The short prompt
 
-`--short` prints one sentence, 44 to 56 words, to paste into an agent or to show on a model page. You fill in the dataset and the bucket. It keeps only the clauses that changed what agents did in tests: the pointer for the kind of model, the bucket mount, a small test first, and the report.
+`--short` prints one sentence to paste into an agent or to show on a model page. It keeps only the clauses that changed what agents did in tests: the pointer for the kind of model, the bucket mount, a small test first, and the report.
 
-`hf jobplan thinkingmachines/Inkling-2-Mini --short`:
+`hf jobplan thinkingmachines/Inkling-2-Mini --short --dataset fancyzhx/ag_news --bucket my-name/my-bucket`:
 
-> Run thinkingmachines/Inkling-2-Mini over <dataset> on Hugging Face Jobs with the `hf` CLI: serve it with vLLM or SGLang inside the Job and send concurrent requests, write to the bucket mounted with `-v hf://buckets/<bucket>:/out` (a token only for gated or private repos), test a few rows first, and report the Job ids and cost per 1,000 items.
+> Run thinkingmachines/Inkling-2-Mini over fancyzhx/ag_news on Hugging Face Jobs with the `hf` CLI: serve it with vLLM or SGLang inside the Job and send concurrent requests, write to the bucket mounted with `-v hf://buckets/my-name/my-bucket:/out` (a token only for gated or private repos), test a few rows first, and report the Job ids and cost per 1,000 items.
 
-`hf jobplan thinkingmachines/Inkling-2-Mini --short --task train`:
+Without `--dataset` and `--bucket` the prompt tells the agent to ask for them. `hf jobplan thinkingmachines/Inkling-2-Mini --short --task train`:
 
-> Fine-tune thinkingmachines/Inkling-2-Mini on <dataset> on Hugging Face Jobs with the `hf` CLI: use TRL, write to the bucket mounted with `-v hf://buckets/<bucket>:/out` (a token only for gated or private repos), test a few rows first, and report the Job ids, cost and eval result.
+> Fine-tune thinkingmachines/Inkling-2-Mini on my dataset on Hugging Face Jobs with the `hf` CLI: use TRL, write to my bucket, mounted into the Job with `-v` (a token only for gated or private repos), test a few rows first, and report the Job ids, cost and eval result. Ask me for the dataset and the bucket before you start.
 
-For a gated model the token clause changes to "this model is gated: pass `--secrets HF_TOKEN`".
+It prints no `<placeholder>`: in a test, agents that got `<bucket>` in the prompt left it in their commands or invented a bucket name (see Status). For a gated model the token clause changes to "this model is gated: pass `--secrets HF_TOKEN`".
 
 ## How it works
 
@@ -184,12 +184,16 @@ What has been tried so far (2026-11-26). The agents were clean headless sessions
 - With the `saturate` clause, Sonnet used it in 3 of 3 bulk-inference plans and Opus in 2 of 3. Haiku used it in 0 of 3.
 - Two open models in another agent harness (GLM-5.3 and DeepSeek-V4.1-Flash in pi) also installed it in 8 of 8 runs, and 7 of the 8 wrote a complete plan.
 
-**The `--short` text, plan-only.** Same 7 cases and 3 agents, 21 runs, compared with a bare request ("do this task with this model on Jobs").
+**A one-sentence prompt, plan-only.** Two versions, same 7 cases and 3 agents, 21 runs each, compared with a bare request ("do this task with this model on Jobs").
 
-- A server for bulk LLM and OCR inference: 6 of 6 plans, against 0 of 6 for the bare request (those used vLLM in-process).
-- A token passed into the Job: 0 of 21 plans, against 17 of 21 for the bare request.
-- The output bucket mounted: 21 of 21 plans, against 16 of 21.
-- The expected training library: 9 of 9 plans, the same as the bare request.
+| | Bare | Short, with the real output path | One sentence, with a `<bucket>` placeholder |
+|---|---|---|---|
+| A server for bulk LLM and OCR inference | 0 of 6 | 6 of 6 | 6 of 6 |
+| A token passed into the Job | 17 of 21 | 1 of 21 | 0 of 21 |
+| The expected training library | 9 of 9 | 9 of 9 | 9 of 9 |
+| Judged likely to run as written (by a separate scoring agent) | 14 of 21 | 18 of 21 | 10 of 21 |
+
+The placeholder version lost on the last row because of the placeholder: 9 of its 21 plans left `<bucket>` in the commands or wrote to an invented bucket. The guidance clauses did their work in both versions. `--short` now prints no placeholder and asks for what is missing. That change has no test yet.
 
 **Real runs on Jobs.** Six agents (Sonnet and Opus) classified 5,000 texts with `thinkingmachines/Inkling-2-Mini`, from a longer prompt with the same pointer and bucket lines, not from this extension.
 
@@ -198,7 +202,7 @@ What has been tried so far (2026-11-26). The agents were clean headless sessions
 - `saturate` against a hand-written client, same endpoint and hardware: 22.5 against 17.8 texts per second, one run each.
 - No agent found the request form that stops the model from reasoning before it answers. That made every run several times slower than a tuned run of the same model.
 
-Limits: one trial per cell; a plan-only run does not show that a plan works; the current section order of the long output has no finished test yet; the real runs cover one model and one task.
+Limits: one trial per cell; a plan-only run does not show that a plan works; the current section order of the long output and the current `--short` wording have no finished test yet; the real runs cover one model and one task.
 
 ## Develop
 

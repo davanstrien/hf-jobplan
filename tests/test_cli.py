@@ -146,17 +146,26 @@ def test_gated_model_says_a_token_is_needed():
     assert "fine-grained token that can only read this repo" in both
 
 
-def test_short_prompt_is_one_sentence_under_60_words():
+def test_short_prompt_has_no_placeholder_and_stays_short():
     for verb in ("infer", "train", None):
         for tag in [*TASK_TAG_TO_KIND, "tabular-classification", None]:
-            prompt = render_short("org/model", tag, [], verb)
-            assert "\n" not in prompt and len(prompt.split()) <= 60 and "{" not in prompt
-            assert "-v hf://buckets/<bucket>:/out" in prompt and "test a few rows first" in prompt
+            for filled in ({}, {"dataset": "org/data", "bucket": "me/out"}):
+                prompt = render_short("org/model", tag, [], verb, **filled)
+                assert "\n" not in prompt and len(prompt.split()) <= 70
+                assert "<" not in prompt and ">" not in prompt and "{" not in prompt
+                assert "test a few rows first" in prompt
+
+
+def test_short_prompt_asks_for_what_is_missing():
+    assert render_short("org/model", "text-generation", [], None).endswith("Ask me for the dataset and the bucket before you start.")
+    assert render_short("org/model", "text-generation", [], None, dataset="org/data").endswith("Ask me for the bucket before you start.")
+    filled = render_short("org/model", "text-generation", [], None, dataset="org/data", bucket="hf://buckets/me/out")
+    assert "Run org/model over org/data" in filled and "-v hf://buckets/me/out:/out" in filled and "Ask me" not in filled
 
 
 def test_short_prompt_pointer_and_token_clause():
     assert "serve it with vLLM or SGLang inside the Job" in render_short("org/model", "text-generation", [], None)
-    assert render_short("org/model", "text-generation", [], "train").startswith("Fine-tune org/model on <dataset> on Hugging Face Jobs with the `hf` CLI: use TRL,")
+    assert render_short("org/model", "text-generation", [], "train").startswith("Fine-tune org/model on my dataset on Hugging Face Jobs with the `hf` CLI: use TRL,")
     assert "use the transformers Trainer" in render_short("answerdotai/ModernBERT-base", "fill-mask", [], None)
     assert "a token only for gated or private repos" in render_short("org/model", "text-generation", [], None)
     assert "this model is gated: pass `--secrets HF_TOKEN`" in render_short("org/model", "text-generation", [], None, gated=True)

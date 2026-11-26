@@ -19,6 +19,8 @@ def main() -> None:
     parser.add_argument("model", nargs="?", help="model id, for example google/embeddinggemma-2")
     parser.add_argument("--task", choices=["infer", "train"], help="the verb; the default comes from the kind of model")
     parser.add_argument("--short", action="store_true", help="print the one-sentence prompt, for a model page or to paste into an agent")
+    parser.add_argument("--dataset", help="with --short: the dataset id to put in the prompt")
+    parser.add_argument("--bucket", help="with --short: the output bucket, as namespace/name, to put in the prompt")
     parser.add_argument("--list", action="store_true", help="print the mapping and exit")
     args = parser.parse_args()
     if args.list:
@@ -29,10 +31,10 @@ def main() -> None:
     try:
         info = HfApi().model_info(args.model, expand=["pipeline_tag", "library_name", "tags", "gated"])
     except HfHubHTTPError:
-        print(render_short(args.model, None, [], args.task) if args.short else render(args.model, None, None, [], args.task, found=False))
+        print(render_short(args.model, None, [], args.task, dataset=args.dataset, bucket=args.bucket) if args.short else render(args.model, None, None, [], args.task, found=False))
         return
     if args.short:
-        print(render_short(args.model, info.pipeline_tag, info.tags or [], args.task, gated=bool(info.gated)))
+        print(render_short(args.model, info.pipeline_tag, info.tags or [], args.task, gated=bool(info.gated), dataset=args.dataset, bucket=args.bucket))
         return
     print(render(args.model, info.pipeline_tag, info.library_name, info.tags or [], args.task, gated=bool(info.gated)))
 

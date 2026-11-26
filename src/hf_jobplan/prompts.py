@@ -164,19 +164,28 @@ SHORT_POINTERS = {
     ("train", "diffusion"): "use the diffusers training scripts",
     ("train", "other"): "use the training method from the model card",
 }
-SHORT = ("{task} on Hugging Face Jobs with the `hf` CLI: {pointer}, write to the bucket mounted with `-v hf://buckets/<bucket>:/out` ({token}), "
-         "test a few rows first, and report the Job ids{report}.")
+SHORT = ("{task} on Hugging Face Jobs with the `hf` CLI: {pointer}, write to {bucket} ({token}), "
+         "test a few rows first, and report the Job ids{report}.{ask}")
 
 
-def render_short(repo: str, tag: str | None, tags: list[str], verb: str | None, gated: bool = False) -> str:
-    """The one-sentence prompt for a model. The user fills in the dataset and the bucket."""
+def render_short(repo: str, tag: str | None, tags: list[str], verb: str | None, gated: bool = False, dataset: str | None = None, bucket: str | None = None) -> str:
+    """The one-sentence prompt for a model.
+
+    With no dataset or bucket the prompt tells the agent to ask for them. In tests, a prompt with
+    `<dataset>` and `<bucket>` placeholders led agents to leave the placeholders in their commands
+    or to invent a bucket name.
+    """
     kind = kind_of(tag, repo, tags)
     chosen = verb or ("train" if kind in TRAIN_BY_DEFAULT else "infer")
+    data = dataset or "my dataset"
+    missing = [name for name, value in (("dataset", dataset), ("bucket", bucket)) if not value]
     return SHORT.format(
-        task=f"Fine-tune {repo} on <dataset>" if chosen == "train" else f"Run {repo} over <dataset>",
+        task=f"Fine-tune {repo} on {data}" if chosen == "train" else f"Run {repo} over {data}",
         pointer=SHORT_POINTERS.get((chosen, kind), SHORT_POINTERS[(chosen, "other")]),
+        bucket=f"the bucket mounted with `-v hf://buckets/{bucket.removeprefix('hf://buckets/')}:/out`" if bucket else "my bucket, mounted into the Job with `-v`",
         token="this model is gated: pass `--secrets HF_TOKEN`" if gated else "a token only for gated or private repos",
         report=", cost and eval result" if chosen == "train" else " and cost per 1,000 items",
+        ask=f" Ask me for the {' and the '.join(missing)} before you start." if missing else "",
     )
 
 
