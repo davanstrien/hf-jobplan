@@ -46,8 +46,8 @@ The other verb: `hf jobplan answerdotai/ModernBERT-base --task infer`. The whole
 ## Find out first (each line is an existing command)
     hf models card answerdotai/ModernBERT-base --text
         how the authors run it: library or server, container image, flags
-    hf models ls answerdotai/ModernBERT-base
-        weight files and sizes: the GPU memory you need
+    hf models info answerdotai/ModernBERT-base
+        task, library, gated or not, parameter count and dtype (the GPU memory you need), files
     hf endpoints catalog ls --search ModernBERT-base
         servers tested for this model, if it is listed
     hf datasets ls uv-scripts/classification

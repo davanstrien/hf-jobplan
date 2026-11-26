@@ -83,7 +83,7 @@ def test_mapping_table_lists_every_pointer():
 def test_hinted_hf_commands_exist():
     """Each `hf ...` hint in the prompt names a real command: its --help must exit 0."""
     prompt = render("org/model", "text-to-image", "diffusers", [], None)
-    commands = set(re.findall(r"(hf (?:models card|models ls|endpoints catalog ls|datasets ls|jobs hardware|jobs uv run|jobs run|jobs logs|jobs inspect|jobs cancel|buckets))", prompt))
+    commands = set(re.findall(r"(hf (?:models card|models info|endpoints catalog ls|datasets ls|jobs hardware|jobs uv run|jobs run|jobs logs|jobs inspect|jobs cancel|buckets))", prompt))
     assert len(commands) == 11
     for command in commands:
         done = subprocess.run([*command.split(), "--help"], check=False, capture_output=True, text=True)

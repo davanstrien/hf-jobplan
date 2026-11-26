@@ -60,8 +60,8 @@ The other verb: `hf jobplan {repo} --task {other_verb}`. The whole mapping: `hf 
 ## Find out first (each line is an existing command)
     hf models card {repo} --text
         how the authors run it: library or server, container image, flags
-    hf models ls {repo}
-        weight files and sizes: the GPU memory you need
+    hf models info {repo}
+        task, library, gated or not, parameter count and dtype (the GPU memory you need), files
     hf endpoints catalog ls --search {name}
         servers tested for this model, if it is listed
     {scripts}
