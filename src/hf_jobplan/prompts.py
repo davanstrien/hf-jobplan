@@ -83,6 +83,9 @@ Everything below uses the `hf` CLI, which printed this. `hf --help` lists its co
 {docs}
 The other verb: `hf jobplan {repo} --task {other_verb}`. The whole mapping: `hf jobplan --list`.
 {custom_code}
+## For this kind of model
+{pointer}
+
 ## Find out first (each line is an existing command)
     hf models card {repo} --text
         how the authors run it: library or server, container image, flags
@@ -96,9 +99,6 @@ The other verb: `hf jobplan {repo} --task {other_verb}`. The whole mapping: `hf 
         flavors and prices
     hf jobs uv run --help
         how to launch; `hf jobs run --help` if the model needs its own image
-
-## For this kind of model
-{pointer}
 
 ## Then
 1. Use a ready script if one fits. If not, write one uv script with inline dependencies. Launch with `hf jobs uv run --detach --timeout <limit> --flavor <flavor> <script>`.

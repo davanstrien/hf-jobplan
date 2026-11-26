@@ -44,6 +44,9 @@ Task tag `fill-mask`, library `transformers` -> kind `encoder`. Verb: `train` (t
 Docs as markdown: Jobs https://huggingface.co/docs/hub/jobs.md; `transformers` index https://huggingface.co/docs/transformers/llms.txt. Any Hugging Face docs page is markdown if you add `.md` to its URL.
 The other verb: `hf jobplan answerdotai/ModernBERT-base --task infer`. The whole mapping: `hf jobplan --list`.
 
+## For this kind of model
+Use the transformers `Trainer` (https://huggingface.co/docs/transformers/trainer.md, source https://github.com/huggingface/transformers) for a classifier, or Sentence Transformers (https://raw.githubusercontent.com/huggingface/sentence-transformers/main/docs/sentence_transformer/training_overview.md) for an embedding model. transformers has no training script to run by URL: write a uv script, or read `train-classifier.py` in the scripts folder above. The Job disk is deleted at the end: write checkpoints and the final model to the mounted bucket (step 4).
+
 ## Find out first (each line is an existing command)
     hf models card answerdotai/ModernBERT-base --text
         how the authors run it: library or server, container image, flags
@@ -57,9 +60,6 @@ The other verb: `hf jobplan answerdotai/ModernBERT-base --task infer`. The whole
         flavors and prices
     hf jobs uv run --help
         how to launch; `hf jobs run --help` if the model needs its own image
-
-## For this kind of model
-Use the transformers `Trainer` (https://huggingface.co/docs/transformers/trainer.md, source https://github.com/huggingface/transformers) for a classifier, or Sentence Transformers (https://raw.githubusercontent.com/huggingface/sentence-transformers/main/docs/sentence_transformer/training_overview.md) for an embedding model. transformers has no training script to run by URL: write a uv script, or read `train-classifier.py` in the scripts folder above. The Job disk is deleted at the end: write checkpoints and the final model to the mounted bucket (step 4).
 
 ## Then
 1. Use a ready script if one fits. If not, write one uv script with inline dependencies. Launch with `hf jobs uv run --detach --timeout <limit> --flavor <flavor> <script>`.
@@ -80,6 +80,20 @@ Everything below uses the `hf` CLI, which printed this. `hf --help` lists its co
 
 ...
 Use the library and the loading code from the model card. If the card has none, the library name above and the files in the repo show how to load the model.
+
+## Find out first (each line is an existing command)
+    hf models card autogluon/mitra-classifier --text
+        how the authors run it: library or server, container image, flags
+    hf models info autogluon/mitra-classifier
+        task, library, gated or not, parameter count and dtype (the GPU memory you need), files
+    hf endpoints catalog ls --search mitra-classifier
+        servers tested for this model, if it is listed
+    hf datasets ls --author uv-scripts
+        ready uv scripts: read one before you write one
+    hf jobs hardware
+        flavors and prices
+    hf jobs uv run --help
+        how to launch; `hf jobs run --help` if the model needs its own image
 ````
 
 ## The mapping

@@ -130,3 +130,9 @@ def test_quantized_or_adapter_repo_points_to_the_base_model_for_training():
     gguf = render("unsloth/Inkling-2-Mini-GGUF", "image-text-to-text", None, ["gguf", "base_model:thinkingmachines/Inkling-2-Mini", "base_model:quantized:thinkingmachines/Inkling-2-Mini"], "train")
     assert "Fine-tune the base model: `hf jobplan thinkingmachines/Inkling-2-Mini --task train`" in gguf
     assert "Fine-tune the base model" not in render("thinkingmachines/Inkling-2-Mini", "image-text-to-text", "transformers", [], "train")
+
+
+def test_pointer_comes_before_the_command_list():
+    """In plan-only tests the pointer changed the path more often when it was near the top of the prompt."""
+    prompt = render("org/model", "text-generation", "transformers", [], "infer")
+    assert prompt.index("## For this kind of model") < prompt.index("## Find out first")
