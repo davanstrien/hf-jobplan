@@ -99,15 +99,17 @@ Hub task tag -> kind of model
   image-classification           classifier
   object-detection               classifier
   automatic-speech-recognition   speech
-  (a name or tag with `ocr`)     ocr
+  (an OCR tag or name, see below) ocr
   (any other tag, or no tag)     other
+
+OCR tags: document-ai, document-parse, document-parsing, document-understanding, handwriting-recognition, ocr, pdf2markdown; or `ocr` / `docling` in the model id or a tag.
 
 Default verb: train for encoder; infer for every other kind.
 
 (verb, kind) -> pointer
 
   infer  llm         Start the model's server (vLLM or SGLang, whichever the model card or the catalogue names) inside the Job and send many requests at once to localhost.
-  infer  ocr         Start the model's server (vLLM or SGLang, whichever the model card names) inside the Job and send one request per page to localhost, many at once.
+  infer  ocr         Follow the model card.
   infer  embedding   Use Sentence Transformers with a large batch size and the prompt names from the model card, or Text Embeddings Inference if the catalogue lists the `tei` engine.
   infer  classifier  Use the transformers `pipeline` or the loading code from the model card, with batches on one small GPU.
   infer  speech      Use the library from the model card.

@@ -22,6 +22,11 @@ TASK_TAG_TO_KIND = {
     "automatic-speech-recognition": "speech",
 }
 
+# OCR and document-parsing models share task tags with general VLMs, so the task tag cannot find them.
+# A model is kind `ocr` when one of its tags is in OCR_TAGS, or when its id or a tag contains one of OCR_WORDS.
+OCR_TAGS = {"ocr", "document-parse", "document-parsing", "document-understanding", "pdf2markdown", "document-ai", "handwriting-recognition"}
+OCR_WORDS = ("ocr", "docling")
+
 # Kinds that people mostly fine-tune. Every other kind defaults to `infer`.
 TRAIN_BY_DEFAULT = {"encoder"}
 
@@ -32,7 +37,7 @@ SERVER = "Start the model's server (vLLM or SGLang, whichever the model card or 
 # (verb, "other") is the fallback for every kind without its own entry.
 POINTERS = {
     ("infer", "llm"): ("bulk generation, classification or extraction", SERVER, "uv-scripts/vllm"),
-    ("infer", "ocr"): ("pages to text", "Start the model's server (vLLM or SGLang, whichever the model card names) inside the Job and send one request per page to localhost, many at once. A loop over pages is several times slower.", "uv-scripts/ocr"),
+    ("infer", "ocr"): ("pages to text", "Follow the model card. If it gives a vLLM or SGLang command, start that server inside the Job and send one request per page to localhost, many at once: a loop over pages is several times slower. If the model has its own library (PaddleOCR, ONNX, ...), use that library with batches.", "uv-scripts/ocr"),
     ("infer", "embedding"): ("embed a dataset", "Use Sentence Transformers with a large batch size and the prompt names from the model card, or Text Embeddings Inference if the catalogue lists the `tei` engine.", "uv-scripts/embeddings"),
     ("infer", "classifier"): ("batch inference", "Use the transformers `pipeline` or the loading code from the model card, with batches on one small GPU.", "uv-scripts/classification"),
     ("infer", "speech"): ("transcribe audio", "Use the library from the model card. Sort the files by length before you batch them.", "uv-scripts/transcription"),
@@ -79,8 +84,9 @@ CUSTOM_CODE = "\nThis repo runs its own code (`custom_code`). Do not pass a toke
 
 
 def kind_of(tag: str | None, repo: str, tags: list[str]) -> str:
-    """OCR models by name or tag, the rest by task tag, `other` when the tag is unknown or missing."""
-    if "ocr" in " ".join([repo, *tags]).lower():
+    """OCR models by tag or name, the rest by task tag, `other` when the tag is unknown or missing."""
+    lowered = [t.lower() for t in tags]
+    if OCR_TAGS & set(lowered) or any(word in text for word in OCR_WORDS for text in [repo.lower(), *lowered]):
         return "ocr"
     return TASK_TAG_TO_KIND.get(tag or "", "other")
 
@@ -107,7 +113,8 @@ def render(repo: str, tag: str | None, library: str | None, tags: list[str], ver
 def mapping_table() -> str:
     lines = ["Hub task tag -> kind of model", ""]
     lines += [f"  {tag:<30} {kind}" for tag, kind in TASK_TAG_TO_KIND.items()]
-    lines += [f"  {'(a name or tag with `ocr`)':<30} ocr", f"  {'(any other tag, or no tag)':<30} other", ""]
+    lines += [f"  {'(an OCR tag or name, see below)':<30} ocr", f"  {'(any other tag, or no tag)':<30} other", ""]
+    lines += [f"OCR tags: {', '.join(sorted(OCR_TAGS))}; or `ocr` / `docling` in the model id or a tag.", ""]
     lines += [f"Default verb: train for {', '.join(sorted(TRAIN_BY_DEFAULT))}; infer for every other kind.", "", "(verb, kind) -> pointer", ""]
     lines += [f"  {verb:<6} {kind:<11} {pointer.split('. ')[0].rstrip('.')}." for (verb, kind), (_, pointer, _) in POINTERS.items()]
     return "\n".join(lines)

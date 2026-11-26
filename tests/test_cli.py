@@ -17,6 +17,26 @@ def test_kind_by_task_tag_with_fallback():
     assert kind_of(None, "org/model", []) == "other"
 
 
+@pytest.mark.parametrize(("repo", "tag", "tags"), [
+    ("lightonai/LightOnOCR-3-0.8B", "image-text-to-text", ["document-understanding", "tables"]),
+    ("zai-org/GLM-OCR", "image-to-text", ["glm_ocr"]),
+    ("PaddlePaddle/PaddleOCR-VL", "image-text-to-text", ["document-parse", "layout"]),
+    ("nanonets/Nanonets-OCR2-3B", "image-text-to-text", ["pdf2markdown"]),
+    ("llamaindex/OCRia-nano-1", "image-to-text", ["document-parsing"]),
+    ("ds4sd/SmolDocling-256M-preview", "image-text-to-text", ["idefics3"]),
+    ("stepfun-ai/GOT-OCR-2.0-hf", "image-text-to-text", ["ocr2.0"]),
+])
+def test_ocr_models_found_by_tag_or_name(repo, tag, tags):
+    """Tags copied from the Hub on 2026-11-26."""
+    assert kind_of(tag, repo, tags) == "ocr"
+
+
+def test_general_vlm_is_not_ocr():
+    assert kind_of("image-text-to-text", "Qwen/Qwen3.8-27B", ["qwen3_5", "eval-results"]) == "llm"
+    # known miss: an OCR model with no OCR tag and no OCR word in its id gets the `llm` pointer, which gives the same server advice
+    assert kind_of("image-text-to-text", "datalab-to/chandra", ["qwen3_vl"]) == "llm"
+
+
 def test_both_verbs_have_a_fallback():
     assert ("infer", "other") in POINTERS and ("train", "other") in POINTERS
 
