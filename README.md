@@ -34,6 +34,7 @@ One mapping, in [`src/hf_jobplan/prompts.py`](src/hf_jobplan/prompts.py):
 3. The verb and the kind pick one pointer: the library or server to use. It is the first thing in the prompt.
 4. The rest of the prompt is the same for every model. Its hints are existing `hf` commands (`hf models card`, `hf jobs hardware`, `hf jobs uv run --help`, ...), so the agent reads live data with the CLI it already has. The extension makes one Hub API call and keeps no copy of prices, flavors or model cards.
 5. Outputs go to a bucket mounted into the Job (`-v hf://buckets/<namespace>/<bucket>:/out`), so the Job needs no token to save its results.
+6. Three notes come from the model's metadata: a gated model needs a token in the Job; a repo that runs its own code should not get your normal token; a GGUF or adapter repo is pointed to its base model for training.
 
 Every model gets a prompt. A kind without its own pointer uses the `other` pointer for the verb ("use the library and the loading code from the model card"). If the Hub lookup fails, the command prints the same prompt without the facts line.
 
