@@ -1,0 +1,135 @@
+"""hf jobplan <model>: print what an agent needs to run a model on Hugging Face Jobs.
+
+The command launches nothing. It collects facts that
+are slow or easy to miss by hand (how the card says to run the model, tested serving
+engines, existing uv scripts that name the model, flavors that fit the weights) and prints
+them with a short procedure. The agent still reads the model card and writes the script.
+"""
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+os.environ.setdefault("HF_HUB_DISABLE_EXPERIMENTAL_WARNING", "1")
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+from huggingface_hub import HfApi, hf_hub_download, snapshot_download  # noqa: E402
+
+TASKS = {
+    "generate": "Bulk generation, classification or extraction with an LLM or VLM: start the model's server (vLLM or SGLang, whichever the card or the catalogue names) inside the Job, wait for it to be ready, and send concurrent requests to localhost. A loop over `model.generate` is several times slower. `saturate` (https://pypi.org/project/saturate/) sends the requests and finds the concurrency for you.",
+    "ocr": "Pages to text with a VLM: same as bulk generation. Start the model's server (vLLM or SGLang) inside the Job and send one request per page, many at a time.",
+    "embed": "Embeddings and rerankers: use Sentence Transformers (https://sbert.net) with a large batch size, or Text Embeddings Inference if the catalogue lists the `tei` engine.",
+    "train-llm": "Fine-tune an LLM: use TRL `SFTTrainer` (https://huggingface.co/docs/trl). Save checkpoints to a mounted bucket or push to a private repo, because the Job disk is deleted at the end.",
+    "train-encoder": "Fine-tune an encoder: use the transformers `Trainer`, or Sentence Transformers for embedding models (https://sbert.net/docs/sentence_transformer/training_overview.html). Save the model before the Job ends.",
+}
+RUN_HINTS = re.compile(r"docker|vllm|sglang|llama[-_.]?cpp|text-embeddings-inference|\btei\b|pip install|uv pip|uv run|trust_remote_code|sentence_transformers|SentenceTransformer|flash[-_]attn|--image|:latest|ghcr\.io|serve ", re.I)
+CACHE = Path.home() / ".cache" / "hf-jobplan"
+
+
+def card_run_lines(card: str) -> list[str]:
+    """Fenced code blocks of the card that show how to install, serve or load the model.
+
+    A block is printed whole (first 12 lines), because one docker or serve command spans lines.
+    """
+    found, block, inside = [], [], False
+    for line in card.splitlines():
+        if line.strip().startswith("```"):
+            if inside and any(RUN_HINTS.search(row) for row in block):
+                found.append("\n".join(block[:12] + (["..."] if len(block) > 12 else [])))
+            inside, block = not inside, []
+        elif inside:
+            block.append(line.rstrip())
+    return list(dict.fromkeys(found))[:6]
+
+
+def default_task(info) -> str:
+    """The task most people want for this kind of model. `--task` overrides it."""
+    tag, text = info.pipeline_tag or "", " ".join([info.id, *(info.tags or [])]).lower()
+    if tag in ("feature-extraction", "sentence-similarity", "text-ranking"):
+        return "embed"
+    if tag == "fill-mask":
+        return "train-encoder"
+    if "ocr" in text:
+        return "ocr"
+    return "generate"
+
+
+def scripts_naming(model: str, api: HfApi) -> list[str]:
+    """uv-scripts files whose text names this model. The script texts are cached for a day."""
+    index = CACHE / "uv-scripts-index.json"
+    if not index.exists() or time.time() - index.stat().st_mtime > 86400:
+        texts = {}
+        for repo in api.list_datasets(author="uv-scripts", limit=200):
+            folder = snapshot_download(repo.id, repo_type="dataset", allow_patterns=["*.py"])
+            for path in Path(folder).rglob("*.py"):
+                texts[f"https://huggingface.co/datasets/{repo.id}/blob/main/{path.relative_to(folder)}"] = path.read_text(errors="replace")
+        CACHE.mkdir(parents=True, exist_ok=True)
+        index.write_text(json.dumps(texts))
+    texts = json.loads(index.read_text())
+    return sorted(url for url, text in texts.items() if model.lower() in text.lower())
+
+
+def flavors() -> list[dict]:
+    out = subprocess.run(["hf", "jobs", "hardware", "--format", "json"], capture_output=True, text=True).stdout
+    rows = []
+    for row in json.loads(out or "[]"):
+        match = re.match(r"(\d+)x .*\((\d+) GB\)", row["accelerator"])
+        rows.append({"name": row["name"], "gpus": int(match[1]) if match else 0, "vram": int(match[2]) if match else 0,
+                     "what": row["accelerator"] or f"{row['cpu']}, {row['ram']} RAM", "usd_h": float(row["cost/hour"].lstrip("$"))})
+    return rows
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(prog="hf jobplan", description=__doc__.split("\n\n")[0])
+    parser.add_argument("model", help="model id, for example google/embeddinggemma-2")
+    parser.add_argument("--task", choices=sorted(TASKS), help="what you want to do; the default comes from the task tag of the model")
+    args = parser.parse_args()
+    api = HfApi()
+    info = api.model_info(args.model, expand=["pipeline_tag", "library_name", "tags", "safetensors", "gated"])
+    weights_gb = sum((s.size or 0) for s in api.model_info(args.model, files_metadata=True).siblings
+                     if s.rfilename.endswith((".safetensors", ".bin", ".gguf"))) / 1e9
+    card = Path(hf_hub_download(args.model, "README.md")).read_text(errors="replace")
+    engines = sorted({r.engine for m in api.list_inference_catalog() if m.repo_id == args.model for r in m.recipes})
+    custom = "custom_code" in (info.tags or [])
+
+    print(f"# Jobs plan for {args.model}\n")
+    print("This command launched nothing. It lists facts and a procedure. Read the model card too: https://huggingface.co/" + args.model + "\n")
+    print("## Facts (Hub API)")
+    print(f"- task tag: {info.pipeline_tag}; library: {info.library_name}; gated: {info.gated}")
+    print(f"- weight files: {weights_gb:.1f} GB" + (f"; parameters: {info.safetensors.total / 1e9:.2f} B" if info.safetensors else ""))
+    print(f"- runs code from the model repo (custom_code): {'YES. Do not pass a token or secret to a Job that loads this model.' if custom else 'no'}")
+    print("\n## How the card says to run it (lines from its code blocks; the card has the context)")
+    blocks = card_run_lines(card)
+    print("\n\n".join("\n".join(f"    {row}" for row in block.splitlines()) for block in blocks) or "    (no install, serve or docker block found in the card)")
+    print("\n## Serving engines tested for this model (Inference Endpoints catalogue)")
+    print(f"- {', '.join(engines)}. A tested engine is the first server to try inside a Job." if engines else "- none listed for this exact repo.")
+    print("\n## uv scripts that already name this model (https://huggingface.co/uv-scripts)")
+    scripts = scripts_naming(args.model, api)
+    print("\n".join(f"- {url}" for url in scripts) or "- none. Scripts for a similar model in the same org are a good template.")
+    if scripts:
+        print("  Read the script before you write a new one: `hf jobs uv run --detach <raw URL> <arguments>` may already do the task.")
+    print("\n## Flavors whose GPU memory holds the weights (`hf jobs hardware`), cheapest first")
+    need = weights_gb * 1.3 + 2
+    fits = sorted((f for f in flavors() if f["gpus"] == 1 and f["vram"] >= need), key=lambda f: f["usd_h"])[:5]
+    print(f"- need about {need:.0f} GB for bf16 weights plus working memory; a server with many requests in flight wants more.")
+    print("\n".join(f"- {f['name']}: {f['what']}, ${f['usd_h']:.2f}/h" for f in fits) or "- no single-GPU flavor fits; see `hf jobs hardware` for multi-GPU flavors.")
+    print("- Cost depends on items per second, not on price per hour. A dearer GPU can be cheaper per item.")
+    task = args.task or default_task(info)
+    others = ", ".join(t for t in sorted(TASKS) if t != task)
+    print(f"\n## Pointer for the task `{task}`" + ("" if args.task else " (default for this kind of model)"))
+    print(f"- {TASKS[task]}\n- Other tasks: `hf jobplan {args.model} --task <{others}>`.")
+    print("""
+## Procedure
+1. Write one uv script with inline dependencies. Run it with `hf jobs uv run --detach --timeout <limit> --flavor <flavor>`.
+   If the model needs its own server image, use `hf jobs run --detach --timeout <limit> <image> <command>`.
+2. Run a few rows first. Read the outputs, not only the exit code.
+3. Say which flavor you picked and why. If a Job is still SCHEDULING after 10 minutes, cancel it and use another flavor.
+4. Then run the full input. Write the results where the user asked.
+5. Report: Job ids, flavor, billed time, cost, cost per 1,000 items, and what you did not check.""")
+
+
+if __name__ == "__main__":
+    sys.exit(main())
