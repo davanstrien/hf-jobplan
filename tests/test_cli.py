@@ -33,8 +33,8 @@ def test_ocr_models_found_by_tag_or_name(repo, tag, tags):
 
 def test_general_vlm_is_not_ocr():
     assert kind_of("image-text-to-text", "Qwen/Qwen3.8-27B", ["qwen3_5", "eval-results"]) == "llm"
-    # known miss: an OCR model with no OCR tag and no OCR word in its id gets the `llm` pointer, which gives the same server advice
-    assert kind_of("image-text-to-text", "datalab-to/chandra", ["qwen3_vl"]) == "llm"
+    # an OCR model with no OCR tag and no OCR word in its id gets the `llm` pointer, which gives the same server advice
+    assert kind_of("image-text-to-text", "org/page-reader", ["qwen3_vl"]) == "llm"
 
 
 def test_both_verbs_have_a_fallback():
