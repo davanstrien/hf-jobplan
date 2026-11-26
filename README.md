@@ -38,6 +38,8 @@ Every model gets a prompt. A kind without its own pointer uses the `other` point
 ````
 # Fine-tune answerdotai/ModernBERT-base on Hugging Face Jobs
 
+Everything below uses the `hf` CLI, which printed this. `hf --help` lists its commands, and every command takes `--help`.
+
 Task tag `fill-mask`, library `transformers` -> kind `encoder`. Verb: `train` (the default for this kind).
 The other verb: `hf jobplan answerdotai/ModernBERT-base --task infer`. The whole mapping: `hf jobplan --list`.
 
@@ -73,8 +75,8 @@ Use the transformers `Trainer` (https://huggingface.co/docs/transformers/trainin
 ````
 # Run black-forest-labs/FLUX.1-dev on Hugging Face Jobs: batch inference
 
-Task tag `text-to-image`, library `diffusers` -> kind `other`. Verb: `infer` (the default for this kind).
-The other verb: `hf jobplan black-forest-labs/FLUX.1-dev --task train`. The whole mapping: `hf jobplan --list`.
+Everything below uses the `hf` CLI, which printed this. `hf --help` lists its commands, and every command takes `--help`.
+
 ...
 Use the library and the loading code from the model card. If the card has none, the library name above and the files in the repo show how to load the model.
 ````

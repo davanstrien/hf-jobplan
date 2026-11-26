@@ -72,6 +72,10 @@ def test_custom_code_warning_only_when_tagged():
     assert "Do not pass a token" not in render("org/model", "text-generation", "transformers", [], "train")
 
 
+def test_prompt_names_the_cli():
+    assert "uses the `hf` CLI" in render("org/model", None, None, [], None)
+
+
 def test_mapping_table_lists_every_pointer():
     assert mapping_table().count("\n  infer") + mapping_table().count("\n  train") == len(POINTERS)
 

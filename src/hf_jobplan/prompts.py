@@ -52,6 +52,8 @@ POINTERS = {
 
 PROMPT = """# {verb_title} {repo} on Hugging Face Jobs{title}
 
+Everything below uses the `hf` CLI, which printed this. `hf --help` lists its commands, and every command takes `--help`.
+
 {facts}
 The other verb: `hf jobplan {repo} --task {other_verb}`. The whole mapping: `hf jobplan --list`.
 {custom_code}
