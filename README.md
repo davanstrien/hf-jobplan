@@ -7,8 +7,23 @@ hf extensions install davanstrien/hf-jobplan
 hf jobplan answerdotai/ModernBERT-base            # an encoder: the default verb is train
 hf jobplan google/embeddinggemma-2                # an embedding model: the default verb is infer
 hf jobplan thinkingmachines/Inkling-2-Mini --task train
+hf jobplan thinkingmachines/Inkling-2-Mini --short   # the one-sentence prompt
 hf jobplan --list
 ```
+
+## The short prompt
+
+`--short` prints one sentence, 44 to 56 words, to paste into an agent or to show on a model page. You fill in the dataset and the bucket. It keeps only the clauses that changed what agents did in tests: the pointer for the kind of model, the bucket mount, a small test first, and the report.
+
+`hf jobplan thinkingmachines/Inkling-2-Mini --short`:
+
+> Run thinkingmachines/Inkling-2-Mini over <dataset> on Hugging Face Jobs with the `hf` CLI: serve it with vLLM or SGLang inside the Job and send concurrent requests, write to the bucket mounted with `-v hf://buckets/<bucket>:/out` (a token only for gated or private repos), test a few rows first, and report the Job ids and cost per 1,000 items.
+
+`hf jobplan answerdotai/ModernBERT-base --short`:
+
+> Fine-tune answerdotai/ModernBERT-base on <dataset> on Hugging Face Jobs with the `hf` CLI: use the transformers Trainer, write to the bucket mounted with `-v hf://buckets/<bucket>:/out` (a token only for gated or private repos), test a few rows first, and report the Job ids, cost and eval result.
+
+For a gated model the token clause changes to "this model is gated: pass `--secrets HF_TOKEN`".
 
 ## How it works
 

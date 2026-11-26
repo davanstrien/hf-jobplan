@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from hf_jobplan.prompts import JOBS_DOCS, LIBRARY_DOCS, POINTERS, TASK_TAG_TO_KIND, kind_of, mapping_table, render
+from hf_jobplan.prompts import JOBS_DOCS, LIBRARY_DOCS, POINTERS, TASK_TAG_TO_KIND, kind_of, mapping_table, render, render_short
 
 KINDS = sorted({*TASK_TAG_TO_KIND.values(), "ocr", "other"})
 URLS = sorted({url.rstrip(".,;)") for _, (_, pointer, _) in POINTERS.items() for url in re.findall(r"https://[^\s`]+", pointer)} | set(LIBRARY_DOCS.values()) | {JOBS_DOCS})
@@ -144,3 +144,19 @@ def test_gated_model_says_a_token_is_needed():
     assert "This model is gated" not in render("org/model", "text-generation", "transformers", [], "infer")
     both = render("org/model", "text-generation", "transformers", ["custom_code"], "infer", gated=True)
     assert "fine-grained token that can only read this repo" in both
+
+
+def test_short_prompt_is_one_sentence_under_60_words():
+    for verb in ("infer", "train", None):
+        for tag in [*TASK_TAG_TO_KIND, "tabular-classification", None]:
+            prompt = render_short("org/model", tag, [], verb)
+            assert "\n" not in prompt and len(prompt.split()) <= 60 and "{" not in prompt
+            assert "-v hf://buckets/<bucket>:/out" in prompt and "test a few rows first" in prompt
+
+
+def test_short_prompt_pointer_and_token_clause():
+    assert "serve it with vLLM or SGLang inside the Job" in render_short("org/model", "text-generation", [], None)
+    assert render_short("org/model", "text-generation", [], "train").startswith("Fine-tune org/model on <dataset> on Hugging Face Jobs with the `hf` CLI: use TRL,")
+    assert "use the transformers Trainer" in render_short("answerdotai/ModernBERT-base", "fill-mask", [], None)
+    assert "a token only for gated or private repos" in render_short("org/model", "text-generation", [], None)
+    assert "this model is gated: pass `--secrets HF_TOKEN`" in render_short("org/model", "text-generation", [], None, gated=True)

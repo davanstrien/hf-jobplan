@@ -148,6 +148,38 @@ def render(repo: str, tag: str | None, library: str | None, tags: list[str], ver
     )
 
 
+# The short prompt: one sentence, with only the clauses that changed what agents did in tests.
+# (verb, kind) -> the first clause. (verb, "other") is the fallback.
+SHORT_POINTERS = {
+    ("infer", "llm"): "serve it with vLLM or SGLang inside the Job and send concurrent requests",
+    ("infer", "ocr"): "serve it with vLLM or SGLang inside the Job and send concurrent requests",
+    ("infer", "embedding"): "use Sentence Transformers",
+    ("infer", "classifier"): "use the transformers pipeline",
+    ("infer", "other"): "use the library from the model card",
+    ("train", "llm"): "use TRL",
+    ("train", "ocr"): "use TRL",
+    ("train", "embedding"): "use Sentence Transformers",
+    ("train", "encoder"): "use the transformers Trainer",
+    ("train", "classifier"): "use the transformers Trainer",
+    ("train", "diffusion"): "use the diffusers training scripts",
+    ("train", "other"): "use the training method from the model card",
+}
+SHORT = ("{task} on Hugging Face Jobs with the `hf` CLI: {pointer}, write to the bucket mounted with `-v hf://buckets/<bucket>:/out` ({token}), "
+         "test a few rows first, and report the Job ids{report}.")
+
+
+def render_short(repo: str, tag: str | None, tags: list[str], verb: str | None, gated: bool = False) -> str:
+    """The one-sentence prompt for a model. The user fills in the dataset and the bucket."""
+    kind = kind_of(tag, repo, tags)
+    chosen = verb or ("train" if kind in TRAIN_BY_DEFAULT else "infer")
+    return SHORT.format(
+        task=f"Fine-tune {repo} on <dataset>" if chosen == "train" else f"Run {repo} over <dataset>",
+        pointer=SHORT_POINTERS.get((chosen, kind), SHORT_POINTERS[(chosen, "other")]),
+        token="this model is gated: pass `--secrets HF_TOKEN`" if gated else "a token only for gated or private repos",
+        report=", cost and eval result" if chosen == "train" else " and cost per 1,000 items",
+    )
+
+
 def mapping_table() -> str:
     lines = ["Hub task tag -> kind of model", ""]
     lines += [f"  {tag:<30} {kind}" for tag, kind in TASK_TAG_TO_KIND.items()]
