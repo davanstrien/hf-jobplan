@@ -132,7 +132,7 @@ An agent that reads the right script or model card writes correct Job commands. 
 
 ## Status
 
-Prototype. The output format and the names will change. `hf-jobplan` in the repo root is the first single-file prototype, kept while tests that call it are running.
+Prototype. The output format and the names will change.
 
 ## Develop
 
